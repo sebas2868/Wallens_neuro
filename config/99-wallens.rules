@@ -1,0 +1,11 @@
+# LiDAR STL-19P (CP2102), identificado por puerto USB físico: el serial 0001 es genérico
+SUBSYSTEM=="tty", ENV{ID_PATH}=="platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1:1.0", SYMLINK+="lidar", GROUP="dialout", MODE="0660"
+
+# Cámaras USB, por modelo (index 0 = flujo de video; el 1 es metadatos).
+# cam_frutas: Logitech C270 (detección de frutas); cam_garra: Suyin HD (verifica agarre)
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="0825", ATTR{index}=="0", SYMLINK+="cam_frutas", GROUP="video", MODE="0660"
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1e45", ATTRS{idProduct}=="8022", ATTR{index}=="0", SYMLINK+="cam_garra", GROUP="video", MODE="0660"
+
+# Adaptador USB-RS485 Peacefair (CH340) hacia los Dynamixel. Por modelo: si se
+# agrega otro CH340, pasar a ID_PATH como el LiDAR.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="dynamixel", GROUP="dialout", MODE="0660"
