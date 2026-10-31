@@ -17,7 +17,8 @@ if [ ! -f /etc/apt/sources.list.d/ros2.list ]; then
 fi
 
 apt-get update
-apt-get -y install ros-jazzy-ros-base ros-dev-tools
+apt-get -y install ros-jazzy-ros-base ros-dev-tools \
+  ros-jazzy-bno055 ros-jazzy-v4l2-camera v4l-utils python3-opencv
 
 # Disponible en cada sesión SSH
 echo 'source /opt/ros/jazzy/setup.bash' > /etc/profile.d/ros2.sh
