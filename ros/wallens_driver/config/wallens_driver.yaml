@@ -1,0 +1,30 @@
+wallens_driver:
+  ros__parameters:
+    port: /dev/dynamixel
+    baudrate: 57600
+    loop_hz: 30.0
+
+    id_left: 2
+    id_right: 4
+    sign_left: 1                # ruedas enfrentadas: la derecha gira con signo contrario para avanzar
+    sign_right: -1
+    k_left: 1.0019              # corrección de velocidad de la rueda izquierda (6 corridas en el aire)
+
+    wheel_radius: 0.03625       # m (diámetro 72.5 mm)
+    wheel_separation: 0.271     # m efectivos: 238 mm medidos × 1.139 (giro de 360° con el IMU); las ruedas patinan al girar en el sitio
+
+    max_linear: 0.15            # m/s
+    max_angular: 1.0            # rad/s
+    max_wheel_rpm: 60.0         # tope por rueda; si se pasa, se escalan las dos (la curva se conserva)
+    cmd_timeout: 0.5            # s sin /cmd_vel para frenar
+    profile_acceleration: 20    # rampa del motor (214.577 rev/min² por unidad), ~0.5 s hasta 40 rpm
+    bus_watchdog: 10            # 20 ms por unidad: 200 ms sin comunicación detiene el motor
+
+    voltage_min: 10.0           # V, rango del XM430-W210
+    voltage_max: 14.8
+    temp_max: 55                # °C
+    max_failures: 5             # ciclos seguidos sin comunicación antes de apagar el nodo
+
+    odom_frame: odom
+    base_frame: base_link
+    publish_tf: true

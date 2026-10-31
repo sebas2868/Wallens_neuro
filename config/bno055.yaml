@@ -6,8 +6,9 @@ bno055:
     i2c_addr: 0x28
     data_query_frequency: 50
     calib_status_frequency: 0.1
-    frame_id: "bno055"
-    operation_mode: 0x0C        # NDOF: fusión de acelerómetro, giroscopio y magnetómetro
+    frame_id: "imu_link"
+    operation_mode: 0x08        # IMUPLUS: acelerómetro + giroscopio, sin magnetómetro (yaw relativo estable para validar giros)
+                                # NDOF = 0x0C añade el magnetómetro (norte absoluto, pero los motores lo perturban)
     placement_axis_remap: "P1"
     acc_factor: 100.0
     mag_factor: 16000000.0

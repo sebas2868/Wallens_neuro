@@ -1,0 +1,13 @@
+wallens_power:
+  ros__parameters:
+    i2c_bus: 1
+    i2c_address: 0x40
+    shunt_ohms: 0.002           # R002
+    current_lsb: 0.0005         # A por paso; cubre hasta ~16 A (CAL = 0.00512 / (lsb * shunt) = 5120)
+    rate_hz: 2.0
+
+    cells: 4                    # 4S
+    warn_cell_voltage: 3.6      # V por celda: solo avisa (supone LiPo)
+    cut_cell_voltage: 3.4       # V por celda: bajo esto se publica battery_critical y el driver frena
+    cut_samples: 5              # muestras seguidas bajo el corte (2.5 s a 2 Hz); evita falsos por caídas con carga
+    resume_margin: 0.3          # V por encima del corte para levantar la alarma
