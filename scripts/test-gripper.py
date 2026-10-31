@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prueba del gripper (Dynamixel XM430, ID 3). Sin opciones solo se mueve: abre y cierra en
+"""Prueba del gripper (Dynamixel XM430, ID 5). Sin opciones solo se mueve: abre y cierra en
 vacío. Con --agarrar cierra despacio hasta sentir contacto, sostiene unos segundos y abre.
 Aborta y apaga el torque ante cualquier anomalía.
 Uso: .venv/bin/python scripts/test-gripper.py [--agarrar] [puerto]   (Ctrl+C apaga el torque)"""
@@ -9,7 +9,7 @@ from dynamixel_sdk import PortHandler, PacketHandler
 AGARRAR = "--agarrar" in sys.argv
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
 PUERTO = _args[0] if _args else "/dev/ttyUSB0"
-ID, BAUD = 3, 57600
+ID, BAUD = 5, 57600
 ABIERTA, CERRADA, MARGEN = 2794, 3851, 60
 RECORTE = 0.10           # se reduce un 10% el rango útil, repartido en ambos extremos
 _util = (CERRADA - ABIERTA - 2 * MARGEN) * (1 - RECORTE)
@@ -17,6 +17,7 @@ _centro = (ABIERTA + CERRADA) / 2
 RETIRO_CIERRE = 4        # ticks que se acorta el cierre; a 80 (rango 763) no tocaba objetos pequeños
 POS_ABRIR, POS_CERRAR = round(_centro - _util / 2), round(_centro + _util / 2) - RETIRO_CIERRE
 
+TOPE_APRIETE = CERRADA - MARGEN   # hasta dónde puede avanzar la meta al agarrar (frutas pequeñas contactan cerca de POS_CERRAR)
 CICLOS = 2
 VELOCIDAD = 40           # Profile Velocity (0.229 rpm por unidad): ~9 rpm
 ACELERACION = 10         # Profile Acceleration (214.577 rev/min² por unidad): rampa de ~0.3 s
@@ -26,14 +27,18 @@ TIEMPO_MAX = 10          # s máximos por movimiento
 VENTANA = 0.5            # s de la ventana para medir avance
 AVANCE_MIN = 10          # ticks mínimos de avance por ventana, si no, está atascada
 VELOCIDAD_AGARRE = 25    # cierre lento para sentir el contacto (~6 rpm)
-CORRIENTE_AGARRE = 420   # fuerza máxima de agarre (~1130 mA); subir si el objeto resbala
+CORRIENTE_AGARRE = 650   # fuerza máxima de agarre (~1750 mA); subir si el objeto resbala
 UMBRAL_CONTACTO = 50     # corriente que, con la pinza detenida, indica contacto
-CORRIENTE_APRIETE = 380  # tras el contacto sigue cerrando hasta llegar a esta corriente (< CORRIENTE_AGARRE)
-TIEMPO_APRIETE = 3       # s máximos empujando después del contacto
-APRIETE = 90             # ticks extra sobre el contacto: fija la fuerza al sostener (garras flexibles)
+CORRIENTE_APRIETE = 625  # tras el contacto sigue cerrando hasta llegar a esta corriente (< CORRIENTE_AGARRE)
+TIEMPO_APRIETE = 6       # s máximos apretando después del contacto
+PASO_APRIETE = 2         # ticks que avanza la meta por lectura (~40 ticks/s): más alto = aprieta más rápido
+FRACCION_DESLIZ = 0.5    # corriente bajo esta fracción de CORRIENTE_APRIETE, ya apretado = se escapa
+LECTURAS_TOPE = 20        # lecturas (~1 s) con la meta en el tope sin alcanzar la fuerza para abortar
+LECTURAS_DESLIZ = 4      # lecturas seguidas bajas para dar el resbalón por cierto (~0.2 s)
+DESLIZ_TICKS = 25        # ticks que la pinza puede cerrarse de más tras el apriete antes de abortar
 SOSTEN = 3               # s sosteniendo el objeto
 WATCHDOG = 10            # Bus Watchdog (20 ms por unidad): 200 ms sin comunicación detiene el motor
-LIMITE_CORRIENTE = 450   # tope de EEPROM (~1210 mA); el motor traía 2 (sin fuerza)
+LIMITE_CORRIENTE = 690   # tope de EEPROM (~1860 mA); el motor traía 2 (sin fuerza)
 CORRIENTE_OBJETIVO = 120 # tope en uso (~320 mA); en vacío la pinza consume mucho menos
 CORRIENTE_ABORTO = 100   # sobre esto sostenido, algo la frena: se aborta
 VOLTAJE_MIN, VOLTAJE_MAX = 10.0, 14.8   # V
@@ -131,7 +136,7 @@ def agarrar():
 
     escribir(112, 4, VELOCIDAD_AGARRE)
     escribir(102, 2, CORRIENTE_AGARRE)
-    escribir(116, 4, POS_CERRAR)
+    escribir(116, 4, TOPE_APRIETE)
     historial, inicio, contacto = [], time.time(), None
     while True:
         time.sleep(PERIODO)
@@ -143,7 +148,7 @@ def agarrar():
                 and max(x[0] for x in historial) - min(x[0] for x in historial) <= 3):
             contacto = actual
             break
-        if abs(actual - POS_CERRAR) <= LLEGADA:
+        if abs(actual - TOPE_APRIETE) <= LLEGADA:
             break
         if time.time() - inicio > TIEMPO_MAX:
             raise Aborto(f"No cerró ni hizo contacto en {TIEMPO_MAX} s")
@@ -152,25 +157,45 @@ def agarrar():
         print(">>> Llegó al final sin contacto: no hay objeto")
     else:
         print(f">>> CONTACTO en {contacto}: apretando hasta corriente {CORRIENTE_APRIETE}")
-        fuertes, fin = 0, time.time() + TIEMPO_APRIETE
-        while time.time() < fin:                # la meta sigue en POS_CERRAR: la pinza empuja
+        # La meta avanza PASO_APRIETE ticks por lectura hasta que la corriente llega a
+        # CORRIENTE_APRIETE: la garra de TPU se comprime y la fuerza sube gradualmente.
+        # Ahí la meta se congela y se sostiene. Si después la corriente se desploma o la
+        # pinza se cierra de más, la fruta se está escapando: se suelta (aborta el agarre).
+        meta, fuertes, bajas, en_tope, llegada, pos_llegada, resbalo = contacto, 0, 0, 0, None, None, False
+        escribir(116, 4, meta)                  # deja de empujar hacia el tope; desde aquí sube de a poco
+        fin = time.time() + TIEMPO_APRIETE + SOSTEN
+        while time.time() < fin:
             time.sleep(PERIODO)
             revisar_salud()
             actual, c = pos(), corriente()
-            print(f"apretando  pos {actual}  corriente {c}")
-            fuertes = fuertes + 1 if abs(c) >= CORRIENTE_APRIETE else 0
-            if fuertes >= 3 or actual >= POS_CERRAR - LLEGADA:
-                break
-        else:
-            print(">>> No llegó a la corriente de apriete; sosteniendo con lo que hay")
-        contacto = pos()
-        print(f">>> Sosteniendo {SOSTEN} s")
-        escribir(116, 4, min(contacto + APRIETE, POS_CERRAR))
-        registrar(SOSTEN, "sosteniendo objeto")
-        deriva = pos() - contacto
+            if llegada is None:
+                if abs(c) < CORRIENTE_APRIETE and meta < TOPE_APRIETE:
+                    meta = min(meta + PASO_APRIETE, TOPE_APRIETE)
+                    escribir(116, 4, meta)
+                elif abs(c) < CORRIENTE_APRIETE:    # meta en el tope y aún sin fuerza: no hay agarre
+                    en_tope += 1
+                    if en_tope >= LECTURAS_TOPE:
+                        resbalo = True
+                        print(f">>> NO AGARRA (pinza al tope con corriente {c}): soltando")
+                        break
+                fuertes = fuertes + 1 if abs(c) >= CORRIENTE_APRIETE else 0
+                if fuertes >= 3:
+                    llegada, pos_llegada = time.time(), actual
+                    fin = min(fin, llegada + SOSTEN)    # desde aquí solo se sostiene SOSTEN s
+                    print(f">>> Fuerza objetivo alcanzada en pos {actual}; sosteniendo {SOSTEN} s")
+            else:
+                bajas = bajas + 1 if abs(c) < CORRIENTE_APRIETE * FRACCION_DESLIZ else 0
+                if bajas >= LECTURAS_DESLIZ or actual - pos_llegada > DESLIZ_TICKS:
+                    resbalo = True
+                    print(f">>> SE RESBALA (corriente {c}, pos {actual} vs {pos_llegada}): soltando")
+                    break
+            print(f"apretando  meta {meta}  pos {actual}  corriente {c}")
+        if llegada is None and not resbalo:
+            print(">>> No llegó a la corriente de apriete; se sostuvo con lo que hay")
         print(f"    temperatura {leer(146, 1)} °C (aborta a {TEMP_MAX})")
-        print(f"    deriva desde el contacto: {deriva} ticks" +
-              ("  (el objeto cede o resbala)" if abs(deriva) > 30 else ""))
+        print(f"    compresión desde el contacto: {pos() - contacto} ticks")
+        if resbalo:
+            print(">>> AGARRE ABORTADO: se detiene todo y vuelve a la pose de apertura")
     print("--- Abriendo")
     escribir(112, 4, VELOCIDAD)
     escribir(102, 2, CORRIENTE_OBJETIVO)
@@ -197,7 +222,7 @@ try:
     escribir(64, 1, 0)                          # torque off para tocar EEPROM y modo
     escribir(11, 1, 5)                          # posición basada en corriente
     escribir(38, 2, LIMITE_CORRIENTE)
-    escribir(52, 4, POS_ABRIR); escribir(48, 4, POS_CERRAR)   # límites de software
+    escribir(52, 4, POS_ABRIR); escribir(48, 4, TOPE_APRIETE)   # límites de software
     print(f"Ganancias del motor: P={leer(84, 2)} I={leer(82, 2)} D={leer(80, 2)}")
     escribir(112, 4, VELOCIDAD)
     escribir(108, 4, ACELERACION)
