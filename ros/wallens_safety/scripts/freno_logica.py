@@ -133,7 +133,7 @@ class Freno:
     """Estado del freno. Los tiempos (`ahora`) son segundos de un reloj monótono que pasa el que llama."""
 
     def __init__(self, dist, semiancho, yaw, minimo, scan_timeout, requiere_scan, cmd_timeout, histeresis,
-                 min_lecturas, huella=None, laser_x=0.0, margen_lateral=0.03, margen_giro=0.03, horizonte_giro=0.5):
+                 min_lecturas, huella=None, laser_x=0.0, margen_lateral=0.03, margen_giro=0.03, horizonte_giro=0.5, retencion_giro=1.0):
         """Sin `huella` la distancia se mide desde el LiDAR en un cono de ±semiancho y el giro no se frena. Con
         huella = polígono [(x, y), ...] en base_link (ver huella_wallens), se mide desde el borde de la huella en un
         pasillo de su ancho y se anula el giro si la huella barrería algo en `horizonte_giro` s. El cono sigue sirviendo para
@@ -143,11 +143,13 @@ class Freno:
         self.cmd_timeout, self.histeresis, self.min_lecturas = cmd_timeout, histeresis, min_lecturas
         self.huella, self.laser_x = huella, laser_x
         self.margen_lateral, self.margen_giro, self.horizonte_giro = margen_lateral, margen_giro, horizonte_giro
+        self.retencion_giro = retencion_giro
         self.frente = self.atras = None       # menor distancia en cada sector
         self.puntos = []
         self.cono_ok = {True: False, False: False}   # el cono delantero/trasero tiene lecturas válidas suficientes
         self.frenando_giro = False
         self.w_frenado = 0.0                       # giro pedido cuando se frenó (para la histéresis del giro)
+        self.t_choque_giro = -math.inf             # último scan que predijo choque al girar
         self.cache_giro = (None, None, None, False)  # (t_scan, w, margen, choque): una evaluación por scan y velocidad
         self.t_scan = -math.inf
         self.v = self.w = 0.0
@@ -205,8 +207,14 @@ class Freno:
                 if self.cache_giro[:3] != (self.t_scan, w, margen):
                     choque = choque_al_girar(self.puntos, w, self.huella, margen, self.horizonte_giro)
                     self.cache_giro = (self.t_scan, w, margen, choque)
-                self.frenando_giro = self.cache_giro[3]
-                self.w_frenado = w if self.frenando_giro else 0.0
+                mismo_sentido = w * self.w_frenado > 0
+                if self.cache_giro[3]:
+                    self.t_choque_giro, self.w_frenado = ahora, w
+                # retención: los puntos junto al gripper se ven de refilón y faltan en algunos scans; frenado el giro
+                # en un sentido, sigue frenado retencion_giro s desde el último scan que vio el choque
+                self.frenando_giro = self.cache_giro[3] or (mismo_sentido and ahora - self.t_choque_giro < self.retencion_giro)
+                if not self.frenando_giro:
+                    self.w_frenado = 0.0
                 if self.frenando_giro:
                     motivo = (motivo + "; " if motivo else "") + "la huella barrería un obstáculo al girar"
             if self.frenando_giro:

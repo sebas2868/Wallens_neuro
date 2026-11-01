@@ -32,6 +32,7 @@ class FrenoLidar(Node):
             margen_lateral=d("lateral_margin", 0.03).value,
             margen_giro=d("turn_margin", 0.03).value,
             horizonte_giro=d("turn_horizon", 0.5).value,
+            retencion_giro=d("turn_hold", 1.0).value,
             dist=self.declare_parameter("stop_distance", 0.30).value,
             semiancho=math.radians(self.declare_parameter("half_angle_deg", 40.0).value),
             yaw=math.radians(self.declare_parameter("laser_yaw_deg", -90.0).value),

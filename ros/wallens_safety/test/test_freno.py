@@ -301,7 +301,7 @@ def test_huella_giro_con_histeresis():
     assert not ciclo_con(f, 0.0, 0.3, [(-0.25, -0.10)], t=10.3)[2]      # y la histéresis ya no aplica
     f2 = con_huella()
     assert ciclo_con(f2, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]
-    assert not ciclo_con(f2, 0.0, 0.3, [(0.5, 0.5)], t=10.1)[2]          # el objeto se fue: suelta
+    assert not ciclo_con(f2, 0.0, 0.3, [(0.5, 0.5)], t=11.1)[2]          # el objeto se fue (y pasó la retención): suelta
 
 
 def test_huella_objeto_junto_al_costado_redondo_deja_girar():
@@ -316,3 +316,14 @@ def test_huella_caja_junto_al_gripper_solo_frena_el_giro_que_lo_acerca():
     caja = [(-0.21, -0.062), (-0.19, -0.069), (-0.17, -0.079), (-0.150, -0.099)]   # medida en la prueba sobre tacos
     assert ciclo_con(con_huella(), 0.0, 0.3, caja)[2]
     assert not ciclo_con(con_huella(), 0.0, -0.3, caja)[2]
+
+
+def test_huella_giro_frenado_se_retiene_si_el_choque_falta_en_un_scan():
+    # en la prueba sobre tacos los puntos junto al gripper faltaban en algunos scans y el freno soltaba a tirones
+    f = con_huella()
+    assert ciclo_con(f, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]
+    assert ciclo_con(f, 0.0, 0.3, [(0.5, 0.5)], t=10.5)[2]              # el scan no lo ve: sigue frenado
+    assert not ciclo_con(f, 0.0, -0.3, [(0.5, 0.5)], t=10.6)[2]         # el sentido contrario nunca se retiene
+    g = con_huella()
+    assert ciclo_con(g, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]
+    assert not ciclo_con(g, 0.0, 0.3, [(0.5, 0.5)], t=11.1)[2]          # pasado 1 s sin verlo: suelta
