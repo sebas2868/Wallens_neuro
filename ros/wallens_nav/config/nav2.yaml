@@ -1,0 +1,180 @@
+# Nav2 recortado para Wallens (Jazzy): solo controller, planner, behavior y bt_navigator, más su lifecycle manager.
+# Sin AMCL (localiza slam_toolbox), sin smoother, velocity_smoother, collision_monitor, waypoint_follower ni docking:
+# la rampa la hace el propio motor (profile_acceleration) y el freno por obstáculo es freno_lidar (/cmd_vel -> /cmd_vel_safe).
+#
+# HUELLA PROVISIONAL (sin medir): rectángulo de 42 x 32 cm alrededor de base_link. Cambiar cuando se midan el frente,
+# la cola, el ancho y el gripper (docs/navegacion.md). La misma huella está en local_costmap y global_costmap.
+
+bt_navigator:
+  ros__parameters:
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odometry/filtered
+    bt_loop_duration: 50                # ms: el árbol se evalúa a 20 Hz (por defecto 100 Hz)
+    default_server_timeout: 20
+    wait_for_service_timeout: 1000
+    action_server_result_timeout: 900.0
+    navigators: ["navigate_to_pose"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    # default_nav_to_pose_bt_xml lo pone el launch (behavior_trees/explorar.xml)
+    error_code_names: ["compute_path_error_code", "follow_path_error_code"]
+
+controller_server:
+  ros__parameters:
+    controller_frequency: 10.0          # Hz: 2.5 veces el cmd_timeout de 0.25 s del freno y del driver
+    costmap_update_timeout: 0.30
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    odom_topic: /odometry/filtered
+    progress_checker_plugins: ["progress_checker"]
+    goal_checker_plugins: ["goal_checker"]
+    controller_plugins: ["FollowPath"]
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.10
+      movement_time_allowance: 15.0
+    goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.20
+      yaw_goal_tolerance: 6.28          # sin giro final: a las fronteras no importa con qué rumbo se llega
+      stateful: true
+    # Regulated Pure Pursuit: sigue el camino con una cuenta geométrica (mucho más barato que MPPI o DWB)
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.10          # m/s de crucero (el driver tope 0.15)
+      lookahead_dist: 0.40
+      min_lookahead_dist: 0.25
+      max_lookahead_dist: 0.60
+      lookahead_time: 1.5
+      use_velocity_scaled_lookahead_dist: false
+      rotate_to_heading_angular_vel: 0.5
+      transform_tolerance: 0.2
+      min_approach_linear_velocity: 0.04
+      approach_velocity_scaling_dist: 0.4
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.5
+      use_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: false
+      regulated_linear_scaling_min_radius: 0.6
+      regulated_linear_scaling_min_speed: 0.04
+      use_fixed_curvature_lookahead: false
+      curvature_lookahead_dist: 0.6
+      use_rotate_to_heading: true       # gira en el sitio solo si el camino sale a más de 60° del rumbo
+      rotate_to_heading_min_angle: 1.05
+      allow_reversing: false
+      max_angular_accel: 1.0
+      max_robot_pose_search_dist: 10.0
+      interpolate_curvature_after_goal: false
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 4.0             # Hz; el launch lo cambia con costmap_hz:=
+      publish_frequency: 1.0
+      global_frame: odom
+      robot_base_frame: base_link
+      rolling_window: true
+      width: 2
+      height: 2
+      resolution: 0.05
+      footprint: "[[0.27, 0.16], [0.27, -0.16], [-0.15, -0.16], [-0.15, 0.16]]"
+      footprint_padding: 0.02
+      always_send_full_costmap: false
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: true
+          clearing: true
+          obstacle_max_range: 1.8
+          obstacle_min_range: 0.12
+          raytrace_max_range: 2.0
+          raytrace_min_range: 0.0
+          max_obstacle_height: 2.0
+          inf_is_valid: false
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.30
+        cost_scaling_factor: 4.0
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 0.2
+      global_frame: map
+      robot_base_frame: base_link
+      resolution: 0.05                  # igual que el mapa; el launch lo cambia con resolucion:=
+      track_unknown_space: true         # lo desconocido no es libre (las fronteras están ahí)
+      footprint: "[[0.27, 0.16], [0.27, -0.16], [-0.15, -0.16], [-0.15, 0.16]]"
+      footprint_padding: 0.02
+      always_send_full_costmap: false
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+        subscribe_to_updates: true
+      obstacle_layer:                   # lo que el SLAM aún no metió en /map (lo actualiza cada 5 s)
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: true
+          clearing: true
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.12
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          max_obstacle_height: 2.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.30
+        cost_scaling_factor: 4.0
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 1.0     # solo un aviso si tarda más; planifica cuando lo pide el árbol
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner::NavfnPlanner"
+      tolerance: 0.25                   # las fronteras están en el borde de lo desconocido
+      use_astar: true
+      allow_unknown: true
+
+behavior_server:
+  ros__parameters:
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["backup", "wait"]    # sin spin: patina y gasta
+    backup:
+      plugin: "nav2_behaviors::BackUp"
+    wait:
+      plugin: "nav2_behaviors::Wait"
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_link
+    transform_tolerance: 0.2
+    simulate_ahead_time: 1.0
+    max_rotational_vel: 0.5
+    min_rotational_vel: 0.2
+    rotational_acc_lim: 1.0
+
+lifecycle_manager_navigation:
+  ros__parameters:
+    autostart: true
+    # slam_toolbox (Jazzy) es un nodo con ciclo de vida: va primero para que exista map -> odom al activar los costmaps
+    node_names: ["slam_toolbox", "controller_server", "planner_server", "behavior_server", "bt_navigator"]
+    bond_timeout: 4.0
+    attempt_respawn_reconnection: false

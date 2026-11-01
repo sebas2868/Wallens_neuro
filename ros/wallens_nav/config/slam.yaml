@@ -1,0 +1,69 @@
+# slam_toolbox en modo online asíncrono, ajustado para gastar poca CPU en la Pi 4 (ver docs/navegacion.md).
+# El LD19 da /scan a 10 Hz fijo: en vez de bajar el sensor se descartan scans (throttle_scans, distancia y giro mínimos).
+slam_toolbox:
+  ros__parameters:
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+    use_lifecycle_manager: true         # lo activa lifecycle_manager_navigation (mapeo.launch.py), con bond
+
+    debug_logging: false
+    throttle_scans: 2                   # procesa 1 de cada 2 scans que llegan (5 Hz como mucho)
+    transform_publish_period: 0.1       # map -> odom a 10 Hz (por defecto 50 Hz); la corrección cambia despacio
+    map_update_interval: 5.0            # s entre /map publicados (redibujar el mapa entero es lo caro)
+    resolution: 0.05                    # m por celda; el launch lo cambia con resolucion:=
+    min_laser_range: 0.12               # descarta reflejos del propio chasis
+    max_laser_range: 8.0                # una habitación; menos celdas que recorrer por scan que con los 12 m del LD19
+    minimum_time_interval: 0.5          # s mínimos entre scans procesados
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: false      # sin RViz interactivo: ahorra memoria y servicios
+
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.30       # m: a 0.10 m/s es un scan cada ~3 s en línea recta
+    minimum_travel_heading: 0.35        # rad (20°): en los giros el scan matching corrige el patinaje
+    check_min_dist_and_heading_precisely: false
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 8.0
+    link_match_minimum_response_fine: 0.1
+    link_scan_maximum_distance: 1.5
+
+    # Cierre de lazo poco frecuente: cadenas largas y búsqueda corta (una habitación)
+    do_loop_closing: true
+    loop_search_maximum_distance: 2.0
+    loop_match_minimum_chain_size: 15
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.40
+    loop_match_minimum_response_fine: 0.50
+
+    # Búsqueda de correlación: espacio y resolución algo más gruesos que los de serie (0.5 / 0.01)
+    correlation_search_space_dimension: 0.4
+    correlation_search_space_resolution: 0.02
+    correlation_search_space_smear_deviation: 0.1
+
+    loop_search_space_dimension: 4.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+    min_pass_through: 2
+    occupancy_threshold: 0.1

@@ -1,0 +1,15 @@
+# explore_lite (m-explore-ros2): manda a Nav2 la frontera más barata entre lo conocido y lo desconocido del /map.
+explore_node:
+  ros__parameters:
+    robot_base_frame: base_link
+    costmap_topic: /map                 # el mapa de slam_toolbox, sin costmap global extra
+    costmap_updates_topic: /map_updates
+    visualize: false                    # sin marcadores (nadie mira RViz en la Pi)
+    planner_frequency: 0.2              # busca fronteras cada 5 s
+    progress_timeout: 30.0              # s sin acercarse a la frontera: se descarta y se elige otra
+    potential_scale: 3.0                # peso de la distancia: favorece fronteras cercanas (trayectorias cortas)
+    orientation_scale: 0.0              # no premia girar hacia la frontera
+    gain_scale: 1.0                     # peso del tamaño de la frontera
+    transform_tolerance: 0.3
+    min_frontier_size: 0.5              # m: ignora huecos pequeños (no compensa ir)
+    return_to_init: false               # al acabar se queda donde está (no gasta en volver)
