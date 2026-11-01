@@ -8,21 +8,21 @@ ekf_filter_node:
     base_link_frame: base_link
     world_frame: odom
 
-    # Odometría de ruedas: velocidad lineal x y velocidad angular z (la posición se integra en el EKF)
+    # Odometría de ruedas: velocidades x, y y z de giro (la posición se integra en el EKF). vy siempre es 0 en un
+    # diferencial: fusionarlo (con covarianza baja, ver el driver) frena la deriva lateral por patinaje (#21)
     odom0: /odom
     odom0_config: [false, false, false,
                    false, false, false,
-                   true,  false, false,
+                   true,  true,  false,
                    false, false, true,
                    false, false, false]
 
-    # IMU (BNO055 en IMUPLUS): yaw y velocidad angular z. relative: el primer yaw medido es el cero
+    # IMU (BNO055 en IMUPLUS): solo la velocidad angular z. El yaw absoluto no se usa: si el chip se reconfigura en
+    # marcha su rumbo vuelve a 0 y la pose saltaría (#16). El rumbo lo integra el EKF con el giroscopio y las ruedas
     imu0: /bno055/imu
     imu0_config: [false, false, false,
-                  false, false, true,
+                  false, false, false,
                   false, false, false,
                   false, false, true,
                   false, false, false]
-    imu0_relative: true
-    imu0_differential: false
     imu0_remove_gravitational_acceleration: false

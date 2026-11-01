@@ -334,7 +334,8 @@ class WallensDriver : public rclcpp::Node {
     o.pose.covariance[14] = o.pose.covariance[21] = o.pose.covariance[28] = 1e6;
     o.pose.covariance[35] = 1e-2;
     o.twist.covariance[0] = 1e-3;
-    o.twist.covariance[7] = o.twist.covariance[14] = o.twist.covariance[21] = o.twist.covariance[28] = 1e6;
+    o.twist.covariance[7] = 1e-3;                // vy = 0 seguro (diferencial): el EKF lo fusiona
+    o.twist.covariance[14] = o.twist.covariance[21] = o.twist.covariance[28] = 1e6;
     o.twist.covariance[35] = 1e-2;
     pub_odom_->publish(o);
 

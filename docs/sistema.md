@@ -17,7 +17,7 @@ INA226 -> wallens_power -> /battery_state, /battery_critical -> wallens_driver (
 | `ros/wallens_power` (C++) | INA226 a 2 Hz, aviso a 3.6 V/celda, corte a 3.4 V/celda (5 muestras seguidas) |
 | `ros/wallens_imu` (C++) | BNO055, ver [imu.md](imu.md) |
 | `ros/wallens_safety` (Python) | `freno_lidar`: anula el avance a menos de 30 cm en ±40° al frente (o atrás al retroceder); suelta a 35 cm; el giro en el sitio no se frena; sin `/scan` en 0.3 s, o con menos de 10 lecturas válidas en el sector (LiDAR tapado), bloquea el avance (`require_scan`); descarta `/cmd_vel` no finito; republica solo 0.25 s tras el último `/cmd_vel`. Publica `/freno_obstaculo` |
-| `config/ekf.yaml` | `robot_localization`: velocidad lineal y angular de las ruedas + yaw y giro del IMU (`imu0_relative`), 2D, 30 Hz |
+| `config/ekf.yaml` | `robot_localization`: velocidades x, y (siempre 0) y de giro de las ruedas + velocidad de giro del IMU, 2D, 30 Hz. El yaw absoluto del IMU no se usa (si el chip se reconfigura en marcha su rumbo vuelve a 0, #16) |
 | `launch/robot.launch.py` | Lanza todo; si el driver muere se cierra todo (`on_exit=Shutdown`) y systemd lo vuelve a lanzar |
 
 `vigilante_lidar` (en `wallens_safety`) reinicia el nodo del LiDAR si `/scan` falta 5 s, con 15 s de espera entre reinicios: el nodo
