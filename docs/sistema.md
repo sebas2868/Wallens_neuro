@@ -20,6 +20,10 @@ INA226 -> wallens_power -> /battery_state, /battery_critical -> wallens_driver (
 | `config/ekf.yaml` | `robot_localization`: velocidad lineal y angular de las ruedas + yaw y giro del IMU (`imu0_relative`), 2D, 30 Hz |
 | `launch/robot.launch.py` | Lanza todo; si el driver muere se cierra todo (`on_exit=Shutdown`) y systemd lo vuelve a lanzar |
 
+`vigilante_lidar` (en `wallens_safety`) reinicia el nodo del LiDAR si `/scan` falta 5 s, con 15 s de espera entre reinicios: el nodo
+`ldlidar` no se cae al desenchufar el USB y no se recupera al reconectar (`/dev/lidar` pasa a otro `ttyUSB`). Medido: `/scan` de vuelta
+~10 s después de desenchufar; mientras tanto el freno bloquea el avance (0.5 s tras el último `/scan`).
+
 Freno, LiDAR, IMU, EKF y `wallens_power` se lanzan con `respawn=True, respawn_delay=2.0`: si uno muere vuelve solo a los 2 s (el
 EKF reinicia su pose en 0 al volver). Tests sin hardware del freno: `python3 -m pytest ros/wallens_safety/test` (no necesita ROS).
 
