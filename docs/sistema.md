@@ -20,6 +20,9 @@ INA226 -> wallens_power -> /battery_state, /battery_critical -> wallens_driver (
 | `config/ekf.yaml` | `robot_localization`: velocidad lineal y angular de las ruedas + yaw y giro del IMU (`imu0_relative`), 2D, 30 Hz |
 | `launch/robot.launch.py` | Lanza todo; si el driver muere se cierra todo (`on_exit=Shutdown`) y systemd lo vuelve a lanzar |
 
+Freno, LiDAR, IMU, EKF y `wallens_power` se lanzan con `respawn=True, respawn_delay=2.0`: si uno muere vuelve solo a los 2 s (el
+EKF reinicia su pose en 0 al volver). Tests sin hardware del freno: `python3 -m pytest ros/wallens_safety/test` (no necesita ROS).
+
 El driver escucha `cmd_vel_safe` (remapeo en `robot.launch.py`): todo lo que publica `/cmd_vel` pasa por el freno, incluidos
 los scripts de `scripts/odometria/`. Para saltarlo hay que publicar a `/cmd_vel_safe` a propósito.
 

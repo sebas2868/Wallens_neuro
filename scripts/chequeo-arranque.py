@@ -109,7 +109,7 @@ def fase_ros():
     for t, minimo in MIN_HZ.items():
         hz = cuenta[t] / VENTANA
         (ok if hz >= minimo else aviso)(f"{t}: {hz:.0f} Hz" + ("" if hz >= minimo else f" (mínimo {minimo:.0f})"))
-    # calib_status sale cada 10 s: se espera hasta que llegue uno
+    # calib_status sale a 1 Hz (calib_status_rate_hz): se espera hasta que llegue uno
     espera = time.time() + 12
     while "calib" not in estado and time.time() < espera:
         rclpy.spin_once(n, timeout_sec=0.1)

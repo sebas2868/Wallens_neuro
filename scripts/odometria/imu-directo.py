@@ -1,4 +1,4 @@
-"""Lee el BNO055 por I2C sin el driver ROS (parar bno055 antes) y busca lecturas con el cuaternion en 0xFF (el driver
+"""Lee el BNO055 por I2C sin el driver ROS (parar antes wallens_imu: sudo systemctl stop wallens) y busca lecturas con el cuaternion en 0xFF (el driver
 lo normaliza a (-0.5, -0.5, -0.5, -0.5)). Cada ciclo hace tres lecturas: el cuaternion solo (8 bytes), un bloque de
 45 bytes desde 0x08 y ese mismo bloque partido en 32 + 13 bytes en dos transacciones, como el driver.
 Uso: python3 imu-directo.py [segundos]"""

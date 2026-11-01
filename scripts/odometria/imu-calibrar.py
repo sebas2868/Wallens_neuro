@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Calibra el acelerómetro del BNO055 (modo IMUPLUS) y guarda el perfil en config/bno055-calibracion.json.
 Muestra el estado (0-3) de giroscopio y acelerómetro en vivo; cuando ambos llevan HOLD segundos en 3,
-pasa a modo configuración, lee los offsets, vuelve a IMUPLUS y los escribe. Parar el nodo bno055 antes.
+pasa a modo configuración, lee los offsets, vuelve a IMUPLUS y los escribe. Parar antes el nodo wallens_imu (va dentro del servicio: sudo systemctl stop wallens).
 Giroscopio: robot quieto unos segundos. Acelerómetro: apoyar el robot quieto 3-5 s en varias posiciones
 distintas (plano, morro arriba, morro abajo, cada lado inclinado); se sube de 0 a 3 por poses.
 Uso: python3 imu-calibrar.py [archivo-salida]   (Ctrl+C sale sin guardar)"""
@@ -44,7 +44,7 @@ def modo(fd, m):
 
 bus = os.open("/dev/i2c-1", os.O_RDWR)
 if leer(bus, 0x00, 1)[0] != 0xA0:
-    sys.exit("El BNO055 no responde (chip id distinto de 0xA0): ¿sigue corriendo el nodo bno055?")
+    sys.exit("El BNO055 no responde (chip id distinto de 0xA0): ¿sigue corriendo wallens_imu (servicio wallens)?")
 actual = leer(bus, OPR_MODE, 1)[0] & 0x0F
 if actual != IMUPLUS:
     print(f"Modo {actual:#x}: pasando a IMUPLUS")

@@ -43,7 +43,7 @@ pines (GPIO 2 y 3, pines 3 y 5), que sigue siendo `/dev/i2c-1`; no cambia el cab
 `scripts/03-i2c.sh --diff` muestra el cambio sin escribir; el script hace copia `config.txt.bak-<fecha>` y escritura
 atómica, y deja el overlay al final porque los `dtparam` de la base deben ir antes de cualquier `dtoverlay=`.
 Resultado medido: 0 fallos en 7600 ciclos (5 min) y 0 picos en ventanas de 30 s con el driver ROS y `wallens_power`.
-`scripts/odometria/imu-directo.py` repite esa medición leyendo el chip sin ROS (parar el nodo `bno055` antes).
+`scripts/odometria/imu-directo.py` repite esa medición leyendo el chip sin ROS (parar antes `wallens_imu`, que va dentro del servicio: `sudo systemctl stop wallens`).
 
 `scripts/prueba-i2c-gpio.sh` carga el bus por software solo en ejecución (sin tocar `config.txt`; reiniciar lo deshace).
 
