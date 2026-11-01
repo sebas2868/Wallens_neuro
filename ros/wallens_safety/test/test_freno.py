@@ -167,3 +167,23 @@ def test_comando_caducado_no_se_republica():
     f.on_cmd(0.05, 0.0, 10.0)
     assert f.ciclo(10.4) is not None
     assert f.ciclo(10.6) is None
+
+
+def test_vigilante_reinicia_con_espera_entre_reinicios():
+    from vigilante_logica import Vigilante
+    v = Vigilante(scan_perdido=5.0, espera=15.0, inicio=100.0)
+    v.on_scan(101.0)
+    assert not v.debe_reiniciar(105.0)             # 4 s sin scan: aún no
+    assert v.debe_reiniciar(106.5)                 # 5.5 s: reinicia
+    assert not v.debe_reiniciar(107.5)             # sigue sin scan pero en espera
+    assert not v.debe_reiniciar(120.0)             # 13.5 s desde el reinicio
+    assert v.debe_reiniciar(122.0)                 # 15.5 s y /scan sigue ausente: otra vez
+    v.on_scan(123.0)
+    assert not v.debe_reiniciar(130.0)             # volvió el scan: no reinicia
+
+
+def test_vigilante_sin_ningun_scan_cuenta_desde_el_arranque():
+    from vigilante_logica import Vigilante
+    v = Vigilante(5.0, 15.0, inicio=100.0)
+    assert not v.debe_reiniciar(104.0)
+    assert v.debe_reiniciar(105.5)

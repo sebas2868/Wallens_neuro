@@ -27,6 +27,9 @@ def generate_launch_description():
       Node(package='wallens_safety', executable='freno_lidar.py', name='freno_lidar', output='screen',
            parameters=[os.path.join(get_package_share_directory('wallens_safety'), 'config', 'wallens_safety.yaml')],
            respawn=True, respawn_delay=2.0),
+      # Reinicia el nodo del LiDAR si /scan falta 5 s (no se recupera solo al reconectar el USB)
+      Node(package='wallens_safety', executable='vigilante_lidar.py', name='vigilante_lidar', output='screen',
+           respawn=True, respawn_delay=2.0),
       paquete('wallens_power', 'power.launch.py'),
       incluir(os.path.join(aqui, 'imu.launch.py')),
       incluir(os.path.join(aqui, 'lidar.launch.py')),
