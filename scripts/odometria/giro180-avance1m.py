@@ -1,7 +1,8 @@
 """Giro de 180 grados (IMU) y luego 1 m recto (odometría). OJO: el giro se detuvo en 151 grados por picos del yaw del IMU (ver imu-reposo.py); mejor cerrar el giro con la odometría.
 Se copia a la Pi y se corre con ROS 2 cargado (source /opt/ros/jazzy/setup.bash y ~/ros_ws/install/setup.bash)
-y los nodos en marcha: ros2 launch wallens_driver driver.launch.py, wallens_power power.launch.py y
-~/wallens/launch/imu.launch.py. MUEVE el robot (salvo imu-reposo.py): espacio libre y mano cerca."""
+y el servicio wallens activo (driver, freno LiDAR, potencia, IMU, LiDAR y EKF; el driver solo escucha
+/cmd_vel_safe, que sale del freno). Sin el servicio: robot.launch.py (driver.launch.py solo
+no se mueve: sin freno_lidar nadie publica /cmd_vel_safe). MUEVE el robot (salvo imu-reposo.py): espacio libre y mano cerca."""
 import math, time, rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist

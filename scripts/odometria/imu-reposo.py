@@ -1,7 +1,8 @@
 """30 s con el robot quieto: frecuencia, norma del cuaternión, deriva del yaw y saltos entre muestras (detecta los picos a 90.0 grados).
 Se copia a la Pi y se corre con ROS 2 cargado (source /opt/ros/jazzy/setup.bash y ~/ros_ws/install/setup.bash)
-y los nodos en marcha: ros2 launch wallens_driver driver.launch.py, wallens_power power.launch.py y
-~/wallens/launch/imu.launch.py. MUEVE el robot (salvo imu-reposo.py): espacio libre y mano cerca."""
+y el servicio wallens activo (driver, freno LiDAR, potencia, IMU, LiDAR y EKF; el driver solo escucha
+/cmd_vel_safe, que sale del freno). Sin el servicio: robot.launch.py (driver.launch.py solo
+no se mueve: sin freno_lidar nadie publica /cmd_vel_safe). MUEVE el robot (salvo imu-reposo.py): espacio libre y mano cerca."""
 import math, statistics as st, time, rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
