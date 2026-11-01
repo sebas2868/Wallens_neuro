@@ -16,7 +16,9 @@ def generate_launch_description():
         {'port_baudrate': 230400},
         {'laser_scan_dir': True},
         {'enable_angle_crop_func': False},
-      ])
+      ],
+      respawn=True,
+      respawn_delay=2.0)
 
   # TF base_link -> base_laser. base_link está en el centro del eje de las ruedas, a su altura (36.25 mm
   # sobre el suelo). LiDAR medido: x 108 mm, z 163 mm sobre el suelo (163 - 36.25 = 126.75 mm). El cero del LiDAR apunta a la izquierda

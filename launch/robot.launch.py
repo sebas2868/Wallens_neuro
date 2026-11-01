@@ -25,7 +25,8 @@ def generate_launch_description():
            on_exit=Shutdown()),
       # Freno por obstáculo: /cmd_vel (scripts, Nav2) -> /cmd_vel_safe (driver)
       Node(package='wallens_safety', executable='freno_lidar.py', name='freno_lidar', output='screen',
-           parameters=[os.path.join(get_package_share_directory('wallens_safety'), 'config', 'wallens_safety.yaml')]),
+           parameters=[os.path.join(get_package_share_directory('wallens_safety'), 'config', 'wallens_safety.yaml')],
+           respawn=True, respawn_delay=2.0),
       paquete('wallens_power', 'power.launch.py'),
       incluir(os.path.join(aqui, 'imu.launch.py')),
       incluir(os.path.join(aqui, 'lidar.launch.py')),

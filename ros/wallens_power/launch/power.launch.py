@@ -8,5 +8,6 @@ def generate_launch_description():
     config = os.path.join(get_package_share_directory('wallens_power'), 'config', 'wallens_power.yaml')
     return LaunchDescription([
         Node(package='wallens_power', executable='wallens_power', name='wallens_power',
-             output='screen', parameters=[config]),
+             output='screen', parameters=[config],
+             respawn=True, respawn_delay=2.0),
     ])

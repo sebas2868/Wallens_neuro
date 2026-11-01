@@ -8,5 +8,6 @@ def generate_launch_description():
   config = os.path.join(os.path.dirname(__file__), '..', 'config', 'ekf.yaml')
   return LaunchDescription([
       Node(package='robot_localization', executable='ekf_node', name='ekf_filter_node',
-           output='screen', parameters=[config]),
+           output='screen', parameters=[config],
+           respawn=True, respawn_delay=2.0),
   ])
