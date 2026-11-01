@@ -3,11 +3,16 @@
 // Si pierde /cmd_vel o la comunicación frena, y al salir apaga el torque (verificándolo). Frena también con
 // /parada, sin /battery_state reciente y con comandos no finitos. Detecta el watchdog del bus disparado (registro 98),
 // lo rearma y lo registra.
+#include <pthread.h>
+#include <sched.h>
+
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -90,6 +95,8 @@ class WallensDriver : public rclcpp::Node {
     marco_odom_ = declare_parameter("odom_frame", "odom");
     marco_base_ = declare_parameter("base_frame", "base_link");
     publicar_tf_ = declare_parameter("publish_tf", true);
+    // Prioridad SCHED_FIFO del hilo de motores (0 = normal). Necesita LimitRTPRIO en la unidad de systemd.
+    prioridad_rt_ = static_cast<int>(declare_parameter("rt_priority", 50));
 
     if (radio_ <= 0 || separacion_ <= 0 || loop_hz_ <= 0 || max_rpm_ <= 0) {
       throw std::invalid_argument("wheel_radius, wheel_separation, loop_hz y max_wheel_rpm deben ser > 0");
@@ -101,6 +108,7 @@ class WallensDriver : public rclcpp::Node {
             RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000, "cmd_vel no finito: se descarta");
             return;
           }
+          std::lock_guard<std::mutex> l(mtx_entradas_);
           cmd_v_ = m->linear.x;
           cmd_w_ = m->angular.z;
           ultimo_cmd_ = std::chrono::steady_clock::now();
@@ -109,6 +117,7 @@ class WallensDriver : public rclcpp::Node {
     // La alarma de wallens_power llega aunque el driver arranque después (transient_local)
     sub_bateria_ = create_subscription<std_msgs::msg::Bool>(
         "battery_critical", rclcpp::QoS(1).transient_local(), [this](std_msgs::msg::Bool::ConstSharedPtr m) {
+          std::lock_guard<std::mutex> l(mtx_entradas_);
           if (m->data != bateria_critica_) {
             RCLCPP_WARN(get_logger(), m->data ? "Batería crítica: las ruedas se frenan" : "Batería recuperada");
           }
@@ -119,6 +128,7 @@ class WallensDriver : public rclcpp::Node {
     // driver arranque después (o se reinicie), y la volátil acepta publicadores que no son transient_local
     // (p. ej. `ros2 topic pub` sin --qos-durability, que con una sola suscripción transient_local no conectaría).
     auto al_recibir_parada = [this](std_msgs::msg::Bool::ConstSharedPtr m) {
+      std::lock_guard<std::mutex> l(mtx_entradas_);
       if (m->data != parada_) {
         RCLCPP_WARN(get_logger(), m->data ? "PARADA recibida: ruedas a velocidad 0 hasta recibir /parada false"
                                           : "Parada levantada: las ruedas obedecen a /cmd_vel_safe");
@@ -130,11 +140,17 @@ class WallensDriver : public rclcpp::Node {
     // Sin lecturas recientes de wallens_power (muerto, INA226 ausente) no se sabe si la batería aguanta: se frena
     sub_estado_bateria_ = create_subscription<sensor_msgs::msg::BatteryState>(
         "battery_state", 10, [this](sensor_msgs::msg::BatteryState::ConstSharedPtr) {
+          std::lock_guard<std::mutex> l(mtx_entradas_);
           ultima_bateria_ = std::chrono::steady_clock::now();
           hay_bateria_ = true;
         });
     pub_odom_ = create_publisher<nav_msgs::msg::Odometry>("odom", 10);
     if (publicar_tf_) tf_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  }
+
+  ~WallensDriver() override {                   // por si nadie llamó a apagar(): un std::thread vivo aborta al destruirse
+    corriendo_ = false;
+    if (hilo_motores_.joinable()) hilo_motores_.join();
   }
 
   // Abre el puerto y deja los motores listos. Se llama aparte del constructor para que, si algo
@@ -165,14 +181,24 @@ class WallensDriver : public rclcpp::Node {
     sync_escritura_ = std::make_unique<dynamixel::GroupSyncWrite>(port_, ph_, DIR_VELOCIDAD_META, 4);
     sync_lectura_ = std::make_unique<dynamixel::GroupSyncRead>(port_, ph_, DIR_LECTURA, LARGO_LECTURA);
     for (Rueda* r : {&izq_, &der_}) sync_lectura_->addParam(r->id);
+    // Bytes en el cable por lectura: pedido (14 + 1 por ID) y una respuesta por motor (11 + datos); 10 bits por byte
+    const int bytes = 14 + 2 + 2 * (11 + LARGO_LECTURA);
+    espera_lectura_ = std::chrono::microseconds(static_cast<int64_t>(0.8 * bytes * 10 * 1e6 / baudrate_));
 
-    timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / loop_hz_), [this] { ciclo(); });
+    // El bucle de los motores va en su propio hilo, que no toca ROS: con SLAM + Nav2 y el PC conectado, el hilo del
+    // executor llegó a bloquearse ~350 ms dentro de la capa DDS y, con el bucle en un timer, saltaba el watchdog del
+    // bus (200 ms). El executor solo recibe órdenes y publica la última odometría que deja el hilo.
+    corriendo_ = true;
+    hilo_motores_ = std::thread([this] { bucle_motores(); });
+    timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / loop_hz_), [this] { publicar_pendiente(); });
     RCLCPP_INFO(get_logger(), "Listo: ruedas IDs %d (izq) y %d (der), %.0f Hz, r=%.4f m, L=%.3f m",
                 izq_.id, der_.id, loop_hz_, radio_, separacion_);
   }
 
   // Frena, apaga el torque y comprueba con una lectura que quedó apagado. Se puede llamar varias veces.
   void apagar() {
+    corriendo_ = false;                          // el hilo de motores termina su ciclo y sale
+    if (hilo_motores_.joinable()) hilo_motores_.join();
     if (!motores_activos_) return;
     motores_activos_ = false;
     timer_.reset();
@@ -200,6 +226,30 @@ class WallensDriver : public rclcpp::Node {
   bool fallo_fatal() const { return fallo_fatal_; }
 
  private:
+  void bucle_motores() {
+    if (prioridad_rt_ > 0) {
+      sched_param sp{};
+      sp.sched_priority = prioridad_rt_;
+      const int r = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+      if (r != 0) {
+        RCLCPP_WARN(get_logger(), "No pude poner el hilo de motores en SCHED_FIFO %d (error %d; ¿LimitRTPRIO?): sigue con prioridad normal",
+                    prioridad_rt_, r);
+      } else {
+        RCLCPP_INFO(get_logger(), "Hilo de motores con prioridad de tiempo real (SCHED_FIFO %d)", prioridad_rt_);
+      }
+    }
+    const auto periodo = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double>(1.0 / loop_hz_));
+    auto siguiente = std::chrono::steady_clock::now();
+    while (corriendo_) {
+      ciclo();
+      siguiente += periodo;
+      const auto ahora = std::chrono::steady_clock::now();
+      if (siguiente < ahora) siguiente = ahora;  // atrasado: no se encadenan ciclos para recuperar
+      std::this_thread::sleep_until(siguiente);
+    }
+  }
+
   void ciclo() {
     const auto ahora = std::chrono::steady_clock::now();
     try {
@@ -213,13 +263,13 @@ class WallensDriver : public rclcpp::Node {
     } catch (const Fatal& e) {
       RCLCPP_FATAL(get_logger(), "%s: se apaga el driver", e.what());
       fallo_fatal_ = true;
-      apagar();
+      corriendo_ = false;                        // main frena y apaga el torque (apagar) al salir de spin
       rclcpp::shutdown();
     } catch (const std::exception& e) {
       if (++fallos_ >= max_fallos_) {
         RCLCPP_FATAL(get_logger(), "%d fallos seguidos (%s): se apaga el driver", fallos_, e.what());
         fallo_fatal_ = true;
-        apagar();
+        corriendo_ = false;
         rclcpp::shutdown();
       } else {
         RCLCPP_WARN(get_logger(), "Fallo de comunicación %d/%d: %s", fallos_, max_fallos_, e.what());
@@ -229,21 +279,30 @@ class WallensDriver : public rclcpp::Node {
 
   void mandar_velocidades(std::chrono::steady_clock::time_point ahora) {
     double v = 0.0, w = 0.0;
-    const bool bateria_ok = !bateria_critica_ && (bateria_timeout_ <= 0 ||
-        (hay_bateria_ && std::chrono::duration<double>(ahora - ultima_bateria_).count() <= bateria_timeout_));
+    // copia de lo que dejan los callbacks del executor
+    double cmd_v, cmd_w;
+    bool hay_cmd, bateria_critica, parada, hay_bateria;
+    std::chrono::steady_clock::time_point ultimo_cmd, ultima_bateria;
+    {
+      std::lock_guard<std::mutex> l(mtx_entradas_);
+      cmd_v = cmd_v_; cmd_w = cmd_w_; hay_cmd = hay_cmd_; ultimo_cmd = ultimo_cmd_;
+      bateria_critica = bateria_critica_; parada = parada_; hay_bateria = hay_bateria_; ultima_bateria = ultima_bateria_;
+    }
+    const bool bateria_ok = !bateria_critica && (bateria_timeout_ <= 0 ||
+        (hay_bateria && std::chrono::duration<double>(ahora - ultima_bateria).count() <= bateria_timeout_));
     if (bateria_ok != bateria_ok_previa_) {
       if (bateria_ok) {
         RCLCPP_INFO(get_logger(), "Hay /battery_state reciente y la batería no es crítica: las ruedas pueden moverse");
-      } else if (!bateria_critica_) {
+      } else if (!bateria_critica) {
         RCLCPP_WARN(get_logger(), "Sin /battery_state reciente (límite %.1f s; ¿wallens_power caído o INA226 ausente?): las ruedas se frenan",
                     bateria_timeout_);
       }
       bateria_ok_previa_ = bateria_ok;
     }
     // tras rearmar el watchdog se espera 1 s parado antes de obedecer otra vez a /cmd_vel_safe
-    if (!parada_ && bateria_ok && rearme_hasta_ <= ahora && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
-      v = std::clamp(cmd_v_, -max_lineal_, max_lineal_);
-      w = std::clamp(cmd_w_, -max_angular_, max_angular_);
+    if (!parada && bateria_ok && rearme_hasta_ <= ahora && hay_cmd && std::chrono::duration<double>(ahora - ultimo_cmd).count() <= cmd_timeout_) {
+      v = std::clamp(cmd_v, -max_lineal_, max_lineal_);
+      w = std::clamp(cmd_w, -max_angular_, max_angular_);
     }
     // m/s de cada rueda -> rpm
     double rpm_izq = (v - w * separacion_ / 2.0) / radio_ * 60.0 / DOS_PI;
@@ -267,7 +326,13 @@ class WallensDriver : public rclcpp::Node {
   }
 
   void leer_y_publicar(std::chrono::steady_clock::time_point ahora) {
-    const int res = sync_lectura_->txRxPacket();
+    // La SDK espera la respuesta leyendo el puerto en un bucle sin dormir: a 57600 baudios son ~14 ms por ciclo de
+    // CPU quemada (el driver llegaba al 70 % de su núcleo). Se manda el pedido, se duerme el 80 % del tiempo que el
+    // cable tarda en traer las respuestas y solo el resto se espera en el bucle de la SDK (su timeout sigue igual).
+    int res = sync_lectura_->txPacket();
+    if (res != COMM_SUCCESS) throw std::runtime_error(ph_->getTxRxResult(res));
+    std::this_thread::sleep_for(espera_lectura_);
+    res = sync_lectura_->rxPacket();
     if (res != COMM_SUCCESS) throw std::runtime_error(ph_->getTxRxResult(res));
     for (Rueda* r : {&izq_, &der_}) {
       uint8_t err = 0;
@@ -316,19 +381,34 @@ class WallensDriver : public rclcpp::Node {
     return static_cast<int32_t>(static_cast<uint32_t>(despues) - static_cast<uint32_t>(antes));
   }
 
+  // Hilo de motores: deja la odometría para que la publique el executor (publish puede bloquearse en la capa DDS)
   void publicar(double v, double w) {
-    const auto stamp = now();
-    const double qz = std::sin(th_ / 2.0), qw = std::cos(th_ / 2.0);
+    std::lock_guard<std::mutex> l(mtx_salida_);
+    salida_ = {now(), x_, y_, th_, v, w};
+    salida_nueva_ = true;
+  }
+
+  // Executor: publica la última odometría del hilo de motores
+  void publicar_pendiente() {
+    Salida s;
+    {
+      std::lock_guard<std::mutex> l(mtx_salida_);
+      if (!salida_nueva_) return;
+      s = salida_;
+      salida_nueva_ = false;
+    }
+    const auto stamp = s.stamp;
+    const double qz = std::sin(s.th / 2.0), qw = std::cos(s.th / 2.0);
     nav_msgs::msg::Odometry o;
     o.header.stamp = stamp;
     o.header.frame_id = marco_odom_;
     o.child_frame_id = marco_base_;
-    o.pose.pose.position.x = x_;
-    o.pose.pose.position.y = y_;
+    o.pose.pose.position.x = s.x;
+    o.pose.pose.position.y = s.y;
     o.pose.pose.orientation.z = qz;
     o.pose.pose.orientation.w = qw;
-    o.twist.twist.linear.x = v;
-    o.twist.twist.angular.z = w;
+    o.twist.twist.linear.x = s.v;
+    o.twist.twist.angular.z = s.w;
     // covarianzas provisionales hasta validar la odometría (Fase 4)
     o.pose.covariance[0] = o.pose.covariance[7] = 1e-3;
     o.pose.covariance[14] = o.pose.covariance[21] = o.pose.covariance[28] = 1e6;
@@ -343,8 +423,8 @@ class WallensDriver : public rclcpp::Node {
       geometry_msgs::msg::TransformStamped t;
       t.header = o.header;
       t.child_frame_id = marco_base_;
-      t.transform.translation.x = x_;
-      t.transform.translation.y = y_;
+      t.transform.translation.x = s.x;
+      t.transform.translation.y = s.y;
       t.transform.rotation = o.pose.pose.orientation;
       tf_->sendTransform(t);
     }
@@ -439,8 +519,10 @@ class WallensDriver : public rclcpp::Node {
   // parámetros
   std::string puerto_, marco_odom_, marco_base_;
   int baudrate_, aceleracion_, watchdog_, temp_max_, max_fallos_, max_disparos_;
+  std::chrono::microseconds espera_lectura_{0};  // lo que se duerme tras pedir la lectura (ver leer_y_publicar)
   double loop_hz_, radio_, separacion_, max_lineal_, max_angular_, max_rpm_, cmd_timeout_, voltaje_min_, voltaje_max_;
   bool publicar_tf_;
+  int prioridad_rt_ = 50;
 
   // hardware
   dynamixel::PortHandler* port_ = nullptr;
@@ -450,10 +532,22 @@ class WallensDriver : public rclcpp::Node {
   Rueda izq_, der_;
   bool motores_activos_ = false;
 
+  // hilos: el de motores (bucle_motores) y el executor (callbacks y publicación) comparten solo lo de los mutex
+  std::thread hilo_motores_;
+  std::atomic<bool> corriendo_{false};
+  std::mutex mtx_entradas_;                     // cmd_*, ultimo_cmd_, bateria_*, parada_, hay_bateria_, ultima_bateria_
+  std::mutex mtx_salida_;                       // salida_, salida_nueva_
+  struct Salida {
+    rclcpp::Time stamp;
+    double x = 0, y = 0, th = 0, v = 0, w = 0;
+  };
+  Salida salida_;
+  bool salida_nueva_ = false;
+
   // estado
   double cmd_v_ = 0.0, cmd_w_ = 0.0;
   bool hay_cmd_ = false;
-  bool fallo_fatal_ = false;
+  std::atomic<bool> fallo_fatal_{false};
   bool bateria_critica_ = false;
   bool parada_ = false;
   bool hay_bateria_ = false;
