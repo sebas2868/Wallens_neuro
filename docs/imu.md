@@ -1,22 +1,30 @@
 # IMU BNO055
 
 I²C por software (i2c-gpio), bus 1 (pines 3 SDA, 5 SCL, 3,3 V, GND), dirección `0x28`,
-modo IMUPLUS (acelerómetro + giroscopio). Driver: `ros-jazzy-bno055` (apt).
+modo IMUPLUS (acelerómetro + giroscopio, sin magnetómetro). Driver: `ros/wallens_imu` (C++, propio).
 
 ## Uso
+
+El servicio `wallens` lo lanza con todo lo demás (`launch/robot.launch.py`). A mano:
 
 ```
 ros2 launch ~/wallens/launch/imu.launch.py
 ros2 topic echo /bno055/imu --once
 ```
 
-Topics principales (prefijo `bno055/`): `imu` (orientación + velocidad angular
-+ aceleración), `imu_raw`, `mag`, `temp`, `calib_status`. Parámetros en
-`config/bno055.yaml` (50 Hz; orientación de montaje en `placement_axis_remap`,
-ajustar según cómo quede fijado al robot).
+Topics (prefijo `bno055/`): `imu` (orientación + velocidad angular + aceleración lineal, 30 Hz) y `calib_status`
+(JSON con sys/gyro/accel/mag, 1 Hz). Parámetros en `ros/wallens_imu/config/wallens_imu.yaml`; el montaje boca abajo
+es `placement_axis_remap: "P6"` (se midió con `scripts/odometria/imu-ejes.py`, que usaba el driver anterior).
 
-Calibración: tras encender, mover el sensor en ocho y dejarlo quieto en
-varias posiciones hasta que `calib_status` muestre todo en 3.
+**Por qué un driver propio.** El bus por software gasta CPU del kernel por cada byte (espera bit a bit). El paquete
+Python `ros-jazzy-bno055` leía 45 bytes por ciclo a 50 Hz y dejaba su nodo al ~85 % de CPU; el EKF dejó de cumplir su
+ritmo. `wallens_imu` lee un solo bloque de 26 bytes (giroscopio, Euler, cuaternión, aceleración lineal) a 30 Hz: ~27 %.
+Descarta bloques con el cuaternión sin norma 1 (la lectura corrupta de 0xFF) y reconfigura el chip si pierde el modo.
+El lanzamiento lo fija al núcleo 3 (`taskset -c 3`) y el servicio deja el resto en los núcleos 0-2.
+`config/bno055.yaml` queda para volver al paquete Python (`ros2 run bno055 bno055 --ros-args --params-file ...`).
+
+Acelerómetro sin calibrar a propósito: en IMUPLUS el yaw sale del giroscopio, que llega solo a 3. El chequeo de
+arranque (`scripts/chequeo-arranque.py`) exige solo el giroscopio.
 
 ## Prueba de aceptación
 
@@ -39,8 +47,8 @@ Resultado medido: 0 fallos en 7600 ciclos (5 min) y 0 picos en ventanas de 30 s 
 
 `scripts/prueba-i2c-gpio.sh` carga el bus por software solo en ejecución (sin tocar `config.txt`; reiniciar lo deshace).
 
-El reinicio de la Pi resetea el BNO055 (modo CONFIGMODE, calibración a 0 salvo el giroscopio): el driver ROS le fija el
-modo al arrancar, así que hay que recalibrar el acelerómetro tras cada reinicio.
+El reinicio de la Pi resetea el BNO055 (modo CONFIGMODE, calibración a 0 salvo el giroscopio): el driver le fija el
+modo al arrancar.
 
 ## Diagnóstico
 

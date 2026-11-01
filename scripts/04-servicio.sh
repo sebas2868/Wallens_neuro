@@ -15,5 +15,6 @@ fi
 
 install -m 644 "$AQUI/systemd/wallens.service" "$UNIDAD"
 systemctl daemon-reload
-systemctl enable --now wallens.service
+systemctl enable wallens.service
+systemctl restart wallens.service      # reinicia aunque ya estuviera activo (toma la unidad y los launch nuevos)
 echo "Servicio activo. Ver: journalctl -u wallens -f   Parar: sudo systemctl stop wallens"

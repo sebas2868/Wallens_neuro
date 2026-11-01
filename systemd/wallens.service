@@ -4,6 +4,8 @@ After=multi-user.target
 
 [Service]
 User=wallens
+# Todo en los núcleos 0-2; el IMU se fija al 3 con taskset en imu.launch.py
+CPUAffinity=0 1 2
 ExecStart=/home/wallens/wallens/scripts/arranque.sh
 # Si el chequeo previo falla (motores o voltaje), reintenta cada 10 s
 Restart=on-failure

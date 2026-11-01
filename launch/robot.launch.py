@@ -30,7 +30,7 @@ def generate_launch_description():
       incluir(os.path.join(aqui, 'lidar.launch.py')),
       incluir(os.path.join(aqui, 'ekf.launch.py')),
       # Con los nodos ya publicando: solo avisa (frecuencias, giroscopio, batería)
-      TimerAction(period=15.0, actions=[
+      TimerAction(period=25.0, actions=[
           ExecuteProcess(cmd=['python3', os.path.join(aqui, '..', 'scripts', 'chequeo-arranque.py'), 'ros'],
                          output='screen')]),
   ])

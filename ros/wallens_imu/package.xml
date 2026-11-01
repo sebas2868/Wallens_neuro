@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>wallens_imu</name>
+  <version>0.1.0</version>
+  <description>Driver mínimo del BNO055 (IMUPLUS) por I2C: lee solo lo que usa el EKF</description>
+  <maintainer email="sebasgrajalesp28@gmail.com">sebas</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
