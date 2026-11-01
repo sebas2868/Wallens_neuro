@@ -1,0 +1,28 @@
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: true
+    publish_tf: true            # el EKF publica odom -> base_link (el driver de ruedas lleva publish_tf: false)
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    # Odometría de ruedas: velocidad lineal x y velocidad angular z (la posición se integra en el EKF)
+    odom0: /odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, true,
+                   false, false, false]
+
+    # IMU (BNO055 en IMUPLUS): yaw y velocidad angular z. relative: el primer yaw medido es el cero
+    imu0: /bno055/imu
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_relative: true
+    imu0_differential: false
+    imu0_remove_gravitational_acceleration: false

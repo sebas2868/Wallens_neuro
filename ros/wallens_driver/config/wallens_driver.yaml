@@ -27,4 +27,4 @@ wallens_driver:
 
     odom_frame: odom
     base_frame: base_link
-    publish_tf: true
+    publish_tf: false           # lo publica el EKF (config/ekf.yaml) fusionando el IMU

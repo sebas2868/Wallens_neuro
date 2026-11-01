@@ -9,7 +9,7 @@ bno055:
     frame_id: "imu_link"
     operation_mode: 0x08        # IMUPLUS: acelerómetro + giroscopio, sin magnetómetro (yaw relativo estable para validar giros)
                                 # NDOF = 0x0C añade el magnetómetro (norte absoluto, pero los motores lo perturban)
-    placement_axis_remap: "P1"
+    placement_axis_remap: "P6"  # IMU boca abajo: x chip = -y robot, y chip = -x robot, z chip = -z (medido con imu-ejes.py); con esto imu_link coincide con base_link
     acc_factor: 100.0
     mag_factor: 16000000.0
     gyr_factor: 900.0
