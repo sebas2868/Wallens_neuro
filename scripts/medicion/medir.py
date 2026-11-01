@@ -94,6 +94,15 @@ class Medidor(Node):
                      "celdas": len(m.data)}
 
 
+def ver_procesos(procs):
+    """Guarda la última lectura de cada proceso (los que se cierran a mitad cuentan hasta su última muestra) y la
+    primera de los que nacen a mitad, para que cuenten desde ahí."""
+    for pid, v in leer_procesos().items():
+        procs["fin"][pid] = v
+        if pid not in procs["ini"] or procs["ini"][pid][0] != v[0]:
+            procs["ini"].setdefault(pid, v)
+
+
 def resumen(med, muestras_cpu, procs, t_total, etiqueta, args):
     b = med.bateria
     wh = sum((b[i][0] - b[i - 1][0]) * (b[i][1] * b[i][2] + b[i - 1][1] * b[i - 1][2]) / 2 for i in range(1, len(b))) / 3600
@@ -140,7 +149,7 @@ def main():
     rclpy.init()
     med = Medidor()
     muestras_cpu = [leer_nucleos()]
-    procs = {"ini": leer_procesos()}
+    procs = {"ini": leer_procesos(), "fin": {}}
     t0 = time.monotonic()
     t_cpu = t0
     print(f"Midiendo '{args.etiqueta}'... (Ctrl+C para terminar)", flush=True)
@@ -150,10 +159,11 @@ def main():
             if time.monotonic() - t_cpu >= 2.0:
                 t_cpu = time.monotonic()
                 muestras_cpu.append(leer_nucleos())
+                ver_procesos(procs)
     except KeyboardInterrupt:
         pass
     muestras_cpu.append(leer_nucleos())
-    procs["fin"] = leer_procesos()
+    ver_procesos(procs)
     r = resumen(med, muestras_cpu, procs, time.monotonic() - t0, args.etiqueta, args)
     carpeta = os.path.expanduser("~/mediciones")
     os.makedirs(carpeta, exist_ok=True)
