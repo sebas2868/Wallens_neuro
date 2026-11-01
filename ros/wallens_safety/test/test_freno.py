@@ -190,7 +190,9 @@ def test_vigilante_sin_ningun_scan_cuenta_desde_el_arranque():
 
 
 # --- Modo huella (#6a, #6b): pasillo del ancho del robot y barrido al girar ---
-HUELLA = (0.27, -0.15, 0.16)      # frente, cola, semiancho en base_link (los de wallens_safety.yaml)
+from freno_logica import huella_wallens  # noqa: E402
+
+HUELLA = huella_wallens(0.148, 0.133, 0.025)      # chasis de 296 mm y gripper atrás (wallens_safety.yaml)
 LASER_X = 0.108
 
 
@@ -216,14 +218,21 @@ def ciclo_con(f, v, w, puntos, t=10.0):
     return f.ciclo(t)
 
 
+def test_huella_contiene_chasis_y_gripper():
+    from freno_logica import dentro
+    assert dentro(HUELLA, 0.14, 0.0) and dentro(HUELLA, 0.0, 0.14) and dentro(HUELLA, -0.27, 0.0)
+    assert not dentro(HUELLA, -0.27, 0.05)          # al lado del gripper no hay robot
+    assert not dentro(HUELLA, 0.16, 0.0) and not dentro(HUELLA, -0.29, 0.0)
+
+
 def test_huella_obstaculo_en_el_pasillo_frena_y_lejos_no():
-    assert ciclo_con(con_huella(), 0.05, 0.0, [(0.27 + 0.10, 0.0)])[2]
-    assert not ciclo_con(con_huella(), 0.05, 0.0, [(0.27 + 0.40, 0.0)])[2]
+    assert ciclo_con(con_huella(), 0.05, 0.0, [(0.148 + 0.10, 0.0)])[2]
+    assert not ciclo_con(con_huella(), 0.05, 0.0, [(0.148 + 0.40, 0.0)])[2]
 
 
-def test_huella_esquina_del_pasillo_frena_aunque_el_cono_no_la_vea():
-    # a 12 cm del frente y en el borde del ancho: fuera del cono de ±40° visto desde el LiDAR cercano
-    r = ciclo_con(con_huella(), 0.05, 0.0, [(0.27 + 0.12, 0.17)])
+def test_huella_frena_por_el_costado_redondo_que_el_cono_no_ve():
+    # a 52° vistos desde el LiDAR (fuera del cono de ±40°), a ~11 cm del borde redondo
+    r = ciclo_con(con_huella(), 0.05, 0.0, [(0.20, 0.12)])
     assert r[2] and r[0] == 0.0
 
 
@@ -232,19 +241,33 @@ def test_huella_objeto_a_un_lado_no_frena_el_avance():
     assert not r[2] and r[0] == 0.05
 
 
-def test_huella_giro_bloqueado_si_barre_un_obstaculo():
-    # junto a la esquina delantera izquierda: girar a la izquierda la mete dentro de la huella
-    v, w, bloqueado, motivo = ciclo_con(con_huella(), 0.0, 0.5, [(0.25, 0.20)])
+def test_huella_retroceso_mide_desde_la_punta_del_gripper():
+    assert ciclo_con(con_huella(), -0.05, 0.0, [(-0.281 - 0.10, 0.0)])[2]      # 10 cm detrás del gripper
+    assert not ciclo_con(con_huella(), -0.05, 0.0, [(-0.281 - 0.30, 0.0)])[2]
+    # detrás del chasis y a un lado del gripper: se mide desde el borde redondo, no desde la punta del gripper
+    assert ciclo_con(con_huella(), -0.05, 0.0, [(-0.20, 0.10)])[2]
+
+
+def test_huella_el_gripper_barre_al_girar():
+    # junto al gripper por la izquierda: girar a la derecha (w < 0) lo lleva contra el gripper
+    v, w, bloqueado, motivo = ciclo_con(con_huella(), 0.0, -0.5, [(-0.22, 0.045)])
     assert bloqueado and w == 0.0 and "girar" in motivo
 
 
-def test_huella_giro_libre_con_obstaculo_lejos():
-    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.0, 0.5, [(0.60, 0.40)])
+def test_huella_puede_girar_para_alejar_el_gripper():
+    # el mismo punto, ya a 2 cm del gripper: girar a la izquierda lo aleja y se permite (si no, quedaría atascado)
+    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.0, 0.5, [(-0.22, 0.045)])
+    assert not bloqueado and w == 0.5
+
+
+def test_huella_giro_libre_con_obstaculo_fuera_del_barrido():
+    # a 32 cm del centro: fuera del círculo que barre el gripper (28.1 cm + margen)
+    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.0, 0.5, [(-0.32, 0.0), (0.0, 0.33)])
     assert not bloqueado and w == 0.5
 
 
 def test_huella_reflejos_del_chasis_no_frenan():
-    r = ciclo_con(con_huella(), 0.05, 0.5, [(0.20, 0.05), (0.0, -0.10)])     # puntos dentro de la huella
+    r = ciclo_con(con_huella(), 0.05, 0.5, [(0.10, 0.05), (-0.25, 0.0)])     # puntos dentro de la huella
     assert not r[2] and (r[0], r[1]) == (0.05, 0.5)
 
 
@@ -264,5 +287,5 @@ def test_huella_sin_scan_bloquea_el_giro():
 
 
 def test_huella_curva_frena_avance_y_deja_giro_libre():
-    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.05, 0.3, [(0.27 + 0.05, 0.0)])
+    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.05, 0.3, [(0.148 + 0.05, 0.0)])
     assert bloqueado and v == 0.0 and w == 0.3        # obstáculo delante (no en el barrido): puede girar para salir

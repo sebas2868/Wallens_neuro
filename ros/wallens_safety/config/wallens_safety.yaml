@@ -1,10 +1,11 @@
 freno_lidar:
   ros__parameters:
-    # Huella del robot en base_link (eje de las ruedas). PROVISIONAL, sin medir: la misma que nav2.yaml de wallens_nav.
-    # Con los tres en 0 vuelve al cono desde el LiDAR (half_angle_deg) y el giro no se frena.
-    footprint_front: 0.27       # m hasta el punto más adelantado (gripper incluido)
-    footprint_rear: -0.15       # m hasta el más atrasado (negativo)
-    footprint_half_width: 0.16  # m, mitad del ancho total
+    # Huella del robot sobre base_link (medida 2026-11-01): chasis redondo de 296 mm centrado en el eje de las ruedas y el
+    # gripper detrás, sobresale 133 mm y mide ~30 mm de ancho (se usan 50 mm). Con chassis_radius 0 vuelve al cono desde el
+    # LiDAR (half_angle_deg) y el giro no se frena. La misma huella está en nav2.yaml de wallens_nav.
+    chassis_radius: 0.148       # m
+    gripper_length: 0.133       # m que sobresale el gripper por detrás del círculo (llega a 0.281 m de base_link)
+    gripper_half_width: 0.025   # m, mitad del ancho del gripper (30 mm medidos + margen)
     laser_x: 0.108              # m, LiDAR delante de base_link (TF de lidar.launch.py)
     lateral_margin: 0.03        # m extra a cada lado del pasillo vigilado
     turn_margin: 0.03           # m de margen alrededor de la huella al simular el giro

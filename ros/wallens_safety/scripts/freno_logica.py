@@ -28,39 +28,99 @@ def puntos_base(rangos, angulo_min, incremento, yaw, laser_x, minimo):
     return pts
 
 
-def en_rect(x, y, x0, x1, semiancho):
-    return x0 <= x <= x1 and abs(y) <= semiancho
+def huella_wallens(radio, largo_gripper, semiancho_gripper, lados=16):
+    """Polígono (lista de (x, y) en base_link, antihorario) del chasis redondo centrado en base_link más el gripper,
+    que sobresale `largo_gripper` por detrás del círculo con `semiancho_gripper` a cada lado. El polígono de `lados`
+    lados contiene al círculo (radio del circunscrito)."""
+    r = radio / math.cos(math.pi / lados)
+    xg = -math.sqrt(max(r * r - semiancho_gripper ** 2, 0.0))
+    cola = -(radio + largo_gripper)
+    pts = []
+    for k in range(lados):
+        a = 2 * math.pi * k / lados
+        if k == lados // 2:                               # el vértice de atrás se cambia por el gripper
+            pts += [(xg, semiancho_gripper), (cola, semiancho_gripper), (cola, -semiancho_gripper), (xg, -semiancho_gripper)]
+        else:
+            pts.append((r * math.cos(a), r * math.sin(a)))
+    return pts
+
+
+def dentro(poligono, x, y):
+    """Punto dentro del polígono (rayo horizontal)."""
+    d = False
+    n = len(poligono)
+    for i in range(n):
+        (x1, y1), (x2, y2) = poligono[i], poligono[(i + 1) % n]
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            d = not d
+    return d
+
+
+def distancia_al_borde(poligono, x, y):
+    """Distancia del punto al contorno del polígono."""
+    mejor = math.inf
+    n = len(poligono)
+    for i in range(n):
+        (x1, y1), (x2, y2) = poligono[i], poligono[(i + 1) % n]
+        dx, dy = x2 - x1, y2 - y1
+        t = max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)))
+        mejor = min(mejor, math.hypot(x - x1 - t * dx, y - y1 - t * dy))
+    return mejor
+
+
+def borde_x(poligono, y, adelante):
+    """x del borde delantero (o trasero) del polígono a la altura lateral y, o None si esa fila no lo corta."""
+    xs = []
+    n = len(poligono)
+    for i in range(n):
+        (x1, y1), (x2, y2) = poligono[i], poligono[(i + 1) % n]
+        if (y1 > y) != (y2 > y):
+            xs.append(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
+    if not xs:
+        return None
+    return max(xs) if adelante else min(xs)
 
 
 def distancia_pasillo(puntos, huella, margen_lateral, adelante=True):
-    """Distancia del borde frontal (o trasero) de la huella al punto más cercano dentro del pasillo de su ancho
-    (+ margen_lateral), o None si el pasillo está libre. huella = (frente, cola, semiancho) en base_link."""
-    frente, cola, semiancho = huella
+    """Menor distancia, en la dirección de marcha, entre el borde delantero (o trasero) de la huella y un punto del
+    pasillo que barre al avanzar (su ancho + margen_lateral a cada lado), o None si está libre. Cada punto se mide
+    desde el borde de la huella a su misma altura lateral (en los costados del margen, desde el borde más cercano)."""
+    semiancho = max(abs(y) for _, y in huella)
     mejor = None
     for x, y in puntos:
         if abs(y) > semiancho + margen_lateral:
             continue
-        d = x - frente if adelante else cola - x
+        yb = max(-0.999 * semiancho, min(0.999 * semiancho, y))
+        b = borde_x(huella, yb, adelante)
+        if b is None:
+            continue
+        d = x - b if adelante else b - x
         if d >= 0 and (mejor is None or d < mejor):
             mejor = d
     return mejor
 
 
 def choque_al_girar(puntos, w, huella, margen, horizonte, pasos=6):
-    """True si al girar en el sitio a w rad/s durante `horizonte` s la huella (+ margen) barre algún punto que hoy
-    está fuera de ella. Los puntos que ya están dentro (reflejos del propio chasis) no cuentan."""
-    frente, cola, semiancho = huella
+    """True si al girar en el sitio a w rad/s durante `horizonte` s la huella barre algún punto que hoy está fuera de
+    ella, o lo deja a menos de `margen` acercándolo. Los puntos que ya están dentro (reflejos del propio chasis) no
+    cuentan, y un punto que ya está a menos de `margen` solo cuenta si el giro lo acerca (así se puede girar para
+    alejarse)."""
     giro = w * horizonte
-    radio2 = max(frente + margen, margen - cola) ** 2 + (semiancho + margen) ** 2   # círculo que barre la huella
+    radio2 = (max(math.hypot(x, y) for x, y in huella) + margen) ** 2     # círculo que barre la huella
     for x, y in puntos:
-        if x * x + y * y > radio2 or en_rect(x, y, cola, frente, semiancho):
+        if x * x + y * y > radio2 or dentro(huella, x, y):
             continue
+        previa = distancia_al_borde(huella, x, y)
         for k in range(1, pasos + 1):
             th = giro * k / pasos               # el punto, visto desde el robot ya girado th
             xr = x * math.cos(th) + y * math.sin(th)
             yr = -x * math.sin(th) + y * math.cos(th)
-            if en_rect(xr, yr, cola - margen, frente + margen, semiancho + margen):
+            if dentro(huella, xr, yr):
                 return True
+            dist = distancia_al_borde(huella, xr, yr)
+            if dist < margen and dist < previa - 1e-4:
+                return True
+            previa = dist
     return False
 
 
@@ -70,8 +130,8 @@ class Freno:
     def __init__(self, dist, semiancho, yaw, minimo, scan_timeout, requiere_scan, cmd_timeout, histeresis,
                  min_lecturas, huella=None, laser_x=0.0, margen_lateral=0.03, margen_giro=0.03, horizonte_giro=0.5):
         """Sin `huella` la distancia se mide desde el LiDAR en un cono de ±semiancho y el giro no se frena. Con
-        huella = (frente, cola, semiancho) en m sobre base_link, se mide desde el borde de la huella en un pasillo de su
-        ancho y se anula el giro si la huella barrería algo en `horizonte_giro` s. El cono sigue sirviendo para
+        huella = polígono [(x, y), ...] en base_link (ver huella_wallens), se mide desde el borde de la huella en un
+        pasillo de su ancho y se anula el giro si la huella barrería algo en `horizonte_giro` s. El cono sigue sirviendo para
         detectar el LiDAR tapado (min_lecturas)."""
         self.dist, self.semiancho, self.yaw, self.minimo = dist, semiancho, yaw, minimo
         self.scan_timeout, self.requiere_scan = scan_timeout, requiere_scan
@@ -82,6 +142,7 @@ class Freno:
         self.puntos = []
         self.cono_ok = {True: False, False: False}   # el cono delantero/trasero tiene lecturas válidas suficientes
         self.frenando_giro = False
+        self.cache_giro = (None, None, False)      # (t_scan, w, choque): el giro se evalúa una vez por scan y velocidad
         self.t_scan = -math.inf
         self.v = self.w = 0.0
         self.t_cmd = -math.inf
@@ -132,7 +193,10 @@ class Freno:
                 self.frenando_giro = True
                 motivo = motivo or "sin /scan reciente (giro)"
             else:
-                self.frenando_giro = choque_al_girar(self.puntos, w, self.huella, self.margen_giro, self.horizonte_giro)
+                if self.cache_giro[:2] != (self.t_scan, w):
+                    choque = choque_al_girar(self.puntos, w, self.huella, self.margen_giro, self.horizonte_giro)
+                    self.cache_giro = (self.t_scan, w, choque)
+                self.frenando_giro = self.cache_giro[2]
                 if self.frenando_giro:
                     motivo = (motivo + "; " if motivo else "") + "la huella barrería un obstáculo al girar"
             if self.frenando_giro:

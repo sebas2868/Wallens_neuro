@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Freno por obstáculo. Lee /cmd_vel (lo que mandan los scripts o Nav2), mira /scan y publica /cmd_vel_safe,
-que es lo que escucha el driver. Con la huella del robot (footprint_*): si va a avanzar y hay algo a menos de
+que es lo que escucha el driver. Con la huella del robot (chassis_radius, gripper_*): si va a avanzar y hay algo a menos de
 stop_distance del borde delantero en un pasillo de su ancho (o del trasero al retroceder) anula la velocidad lineal,
 y anula el giro si la huella barrería un obstáculo en los próximos turn_horizon s. Sin huella: cono de
 ±half_angle_deg medido desde el LiDAR y el giro no se frena. Se reanuda solo cuando
@@ -16,16 +16,16 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
 
-from freno_logica import Freno
+from freno_logica import Freno, huella_wallens
 
 
 class FrenoLidar(Node):
     def __init__(self):
         super().__init__("freno_lidar")
         d = self.declare_parameter
-        frente, cola, semiancho = (d("footprint_front", 0.0).value, d("footprint_rear", 0.0).value,
-                                   d("footprint_half_width", 0.0).value)
-        huella = (frente, cola, semiancho) if frente > 0 and cola < 0 and semiancho > 0 else None
+        radio, largo_g, semiancho_g = (d("chassis_radius", 0.0).value, d("gripper_length", 0.0).value,
+                                       d("gripper_half_width", 0.0).value)
+        huella = huella_wallens(radio, largo_g, semiancho_g) if radio > 0 else None
         self.freno = Freno(
             huella=huella,
             laser_x=d("laser_x", 0.108).value,
@@ -48,8 +48,8 @@ class FrenoLidar(Node):
         self.pub_freno = self.create_publisher(Bool, "freno_obstaculo", 1)
         self.create_timer(1 / 30, self.ciclo)
         if huella:
-            self.get_logger().info(f"Freno por huella: frente {frente} m, cola {cola} m, semiancho {semiancho} m; "
-                                   "frena también el giro")
+            self.get_logger().info(f"Freno por huella: chasis de radio {radio} m, gripper atrás {largo_g} m x "
+                                   f"{2 * semiancho_g} m; frena también el giro")
         else:
             self.get_logger().warn("Sin huella (footprint_*): cono desde el LiDAR y el giro no se frena")
 
