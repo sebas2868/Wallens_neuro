@@ -22,6 +22,9 @@ def generate_launch_description():
       Node(package='wallens_driver', executable='wallens_driver', name='wallens_driver', output='screen',
            parameters=[os.path.join(get_package_share_directory('wallens_driver'), 'config', 'wallens_driver.yaml')],
            remappings=[('cmd_vel', 'cmd_vel_safe')],      # el driver solo oye lo que pasa por el freno
+           # Núcleo 2 para él solo y prioridad de tiempo real (FIFO 50, LimitRTPRIO en la unidad): con SLAM + Nav2
+           # el bucle llegó a atrasarse 350 ms y el watchdog del bus (200 ms) apagó el driver. El 3 es del IMU.
+           prefix='taskset -c 2 chrt -f 50',
            on_exit=Shutdown()),
       # Freno por obstáculo: /cmd_vel (scripts, Nav2) -> /cmd_vel_safe (driver)
       Node(package='wallens_safety', executable='freno_lidar.py', name='freno_lidar', output='screen',

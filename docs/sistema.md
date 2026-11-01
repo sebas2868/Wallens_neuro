@@ -105,7 +105,13 @@ El bus I²C por software espera bit a bit en el kernel. Medido con el servicio c
 `taskset -c 3` en `imu.launch.py`), núcleos 0-2 a 15-18 % (`CPUAffinity=0 1 2` en el servicio), Pi al ~19 %, 43 °C, sin throttling.
 Con el driver Python del IMU (45 bytes, 50 Hz) el nodo llegaba al 85 % y el EKF dejaba de cumplir su ritmo.
 Presupuesto estimado (no medido) para SLAM + Nav2: 1-1.5 núcleos; video JPEG 640x480 a 15 fps ~0.3; H.264 por el codificador
-de la Pi 4 casi nada. Medir antes y después de sumarlos y subir la prioridad del driver y el EKF si hace falta.
+de la Pi 4 casi nada.
+
+Reparto actual (2026-11-01): **núcleo 2 solo para el driver** con prioridad de tiempo real (`taskset -c 2 chrt -f 50` en
+`robot.launch.py`, `LimitRTPRIO=50` en la unidad), núcleo 3 para el IMU, y el resto del servicio y el mapeo en los núcleos 0-1
+(`CPUAffinity=0 1`). Motivo: con SLAM + Nav2 en marcha el bucle del driver (lectura de motores cada 33 ms, un solo hilo) se
+atrasó hasta 352 ms; pasados los 200 ms salta el watchdog del bus y al tercero en un minuto el driver se apaga (pasó dos veces).
+El mapa puede ir lento; las ruedas no.
 
 ## Batería y motores: lo aprendido
 

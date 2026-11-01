@@ -6,7 +6,7 @@ Se lanza con el servicio `wallens` en marcha (driver, freno, LiDAR, IMU, EKF, po
   ros2 launch wallens_nav mapeo.launch.py explorar:=false        # solo SLAM + Nav2 (destinos a mano o mapeo con teleop)
   ros2 launch wallens_nav mapeo.launch.py resolucion:=0.10 costmap_hz:=2.0   # perfil de comparación
 Nav2 publica en /cmd_vel, que pasa por freno_lidar. Si el supervisor termina (o Ctrl+C) se cierra todo y el robot queda
-quieto. Todos los nodos van a los núcleos 0-2 (el 3 es del IMU) con nice 5: el driver y el EKF tienen prioridad."""
+quieto. Todos los nodos van a los núcleos 0-1 con nice 5 (el 2 es del driver y el 3 del IMU): el mapa puede retrasarse, las ruedas no."""
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -36,7 +36,7 @@ def generate_launch_description():
         DeclareLaunchArgument('costmap_hz', default_value='4.0', description='Hz de actualización del costmap local'),
         DeclareLaunchArgument('throttle_scans', default_value='2', description='slam_toolbox procesa 1 de cada N scans'),
         DeclareLaunchArgument('explorar', default_value='true', description='lanzar explore_lite'),
-        DeclareLaunchArgument('prefijo', default_value='taskset -c 0-2 nice -n 5',
+        DeclareLaunchArgument('prefijo', default_value='taskset -c 0-1 nice -n 5',
                               description='prefijo de cada proceso (núcleos y prioridad)'),
         LogInfo(msg=['Mapeo: resolución ', LaunchConfiguration('resolucion'), ' m, costmap local ',
                      LaunchConfiguration('costmap_hz'), ' Hz, throttle_scans ', LaunchConfiguration('throttle_scans')]),

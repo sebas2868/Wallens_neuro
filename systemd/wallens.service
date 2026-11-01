@@ -4,8 +4,10 @@ After=multi-user.target
 
 [Service]
 User=wallens
-# Todo en los núcleos 0-2; el IMU se fija al 3 con taskset en imu.launch.py
-CPUAffinity=0 1 2
+# Todo en los núcleos 0-1. robot.launch.py fija el driver al 2 con prioridad de tiempo real (chrt -f 50) e
+# imu.launch.py el IMU al 3 (I2C por software). LimitRTPRIO deja a un usuario normal pedir esa prioridad.
+CPUAffinity=0 1
+LimitRTPRIO=50
 ExecStart=/home/wallens/wallens/scripts/arranque.sh
 # Reintenta siempre cada 10 s, también si el driver se apagó solo (USB, riel de 12 V): ros2 launch puede terminar con
 # código 0 aunque el driver salga con 1. El chequeo previo bloquea el arranque si hay error de hardware o el voltaje está
