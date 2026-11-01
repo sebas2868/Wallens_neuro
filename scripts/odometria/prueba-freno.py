@@ -22,9 +22,12 @@ n.create_subscription(Twist, "cmd_vel_safe", lambda m: (d["safe"].append(m.linea
 n.create_subscription(Bool, "freno_obstaculo", lambda m: d["freno"].append(m.data), QoSProfile(depth=1))
 n.create_subscription(Odometry, "odom", lambda m: d.update(x=m.pose.pose.position.x, y=m.pose.pose.position.y,
                                                          yaw=2 * math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)), 10)
-t = time.time()
-while d["x"] is None and time.time() - t < 5:
+t = time.time()   # espera la odometría y a que freno_lidar esté suscrito (si no, las primeras órdenes se pierden)
+while (d["x"] is None or pub.get_subscription_count() == 0) and time.time() - t < 5:
     rclpy.spin_once(n, timeout_sec=0.1)
+if d["x"] is None or pub.get_subscription_count() == 0:
+    sys.exit("Sin /odom o sin suscriptor de /cmd_vel en 5 s: ¿servicio wallens en marcha?")
+time.sleep(0.3); rclpy.spin_once(n, timeout_sec=0.1)
 x0, y0, yaw0 = d["x"], d["y"], d["yaw"]
 fin = time.time() + 2.0
 while time.time() < fin:
