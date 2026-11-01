@@ -11,12 +11,20 @@ Uso: .venv/bin/python scripts/test-tornillo.py [--sentido=+1|-1] [--corriente=N]
   --vueltas=N  vueltas máximas del tramo de búsqueda antes de abortar (por defecto 40).
   --corriente  Goal Current de la búsqueda (2.69 mA por unidad); por defecto 120 (~320 mA).
 (Ctrl+C apaga el torque)"""
-import json, os, signal, sys, time
+import subprocess, json, os, signal, sys, time
 from dynamixel_sdk import PortHandler, PacketHandler
 
 _opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
-PUERTO = _args[0] if _args else "/dev/ttyUSB0"
+PUERTO = _args[0] if _args else "/dev/dynamixel"
+
+def _servicio_activo():
+    try:
+        return subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0
+    except FileNotFoundError:               # sin systemd (PC de desarrollo)
+        return False
+if _servicio_activo():
+    sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
 SENTIDO = 1 if _opts.get("sentido", "-1") in ("+1", "1") else -1
 ID, BAUD = 3, 57600
 CORRIENTE_BUSQUEDA = int(_opts.get("corriente", 120))
@@ -170,8 +178,10 @@ except Aborto as e:
     print(f"\nABORTADO: {e}")
 finally:
     try:
+        escribir(98, 1, 0)                      # primero el watchdog: disparado, rechaza la escritura del torque
         escribir(64, 1, 0)
-        escribir(98, 1, 0)
+        if leer(64, 1):
+            raise Aborto("el torque sigue encendido")
         print("Torque apagado")
     except Aborto:
         print("No pude confirmar el apagado del torque: desconecta la alimentación del motor")

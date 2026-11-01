@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """Busca Dynamixel (protocolo 2.0) probando baudrates e IDs. Solo lee; no activa torque.
 Uso: .venv/bin/python scripts/scan-dynamixel.py [puerto]"""
-import sys
+import subprocess, sys
 from dynamixel_sdk import PortHandler, PacketHandler
 
-PUERTO = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyUSB0"
+PUERTO = sys.argv[1] if len(sys.argv) > 1 else "/dev/dynamixel"
+
+def _servicio_activo():
+    try:
+        return subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0
+    except FileNotFoundError:               # sin systemd (PC de desarrollo)
+        return False
+if _servicio_activo():
+    sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
 BAUDS = [57600, 115200, 1000000, 2000000, 3000000, 4000000, 9600]
 
 puerto = PortHandler(PUERTO)

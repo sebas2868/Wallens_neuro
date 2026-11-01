@@ -8,7 +8,7 @@ Opciones: --rpm N (por defecto 20), --tiempo S (por defecto 3), --invertir-izq, 
 (si una rueda gira hacia atrás), --corridas N (alterna adelante y atrás y promedia la corrección),
 --guardar (guarda la corrección para las próximas pruebas).
 Uso: .venv/bin/python scripts/test-avance.py [opciones] [puerto]   (Ctrl+C apaga el torque)"""
-import json, os, signal, sys, time
+import subprocess, json, os, signal, sys, time
 from dynamixel_sdk import PortHandler, PacketHandler, GroupSyncWrite
 
 def _opcion(nombre, defecto):
@@ -16,7 +16,15 @@ def _opcion(nombre, defecto):
 
 _args = [a for i, a in enumerate(sys.argv[1:], 1)
          if not a.startswith("--") and sys.argv[i - 1] not in ("--rpm", "--tiempo", "--corridas")]
-PUERTO = _args[0] if _args else "/dev/ttyUSB0"
+PUERTO = _args[0] if _args else "/dev/dynamixel"
+
+def _servicio_activo():
+    try:
+        return subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0
+    except FileNotFoundError:               # sin systemd (PC de desarrollo)
+        return False
+if _servicio_activo():
+    sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
 BAUD = 57600
 ID_IZQ, ID_DER = 2, 4
 SIGNO_IZQ, SIGNO_DER = 1, -1     # ruedas enfrentadas: una gira con signo contrario para avanzar

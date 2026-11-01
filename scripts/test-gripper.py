@@ -3,12 +3,20 @@
 vacío. Con --agarrar cierra despacio hasta sentir contacto, sostiene unos segundos y abre.
 Aborta y apaga el torque ante cualquier anomalía.
 Uso: .venv/bin/python scripts/test-gripper.py [--agarrar] [puerto]   (Ctrl+C apaga el torque)"""
-import signal, sys, time
+import subprocess, signal, sys, time
 from dynamixel_sdk import PortHandler, PacketHandler
 
 AGARRAR = "--agarrar" in sys.argv
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
-PUERTO = _args[0] if _args else "/dev/ttyUSB0"
+PUERTO = _args[0] if _args else "/dev/dynamixel"
+
+def _servicio_activo():
+    try:
+        return subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0
+    except FileNotFoundError:               # sin systemd (PC de desarrollo)
+        return False
+if _servicio_activo():
+    sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
 ID, BAUD = 5, 57600
 ABIERTA, CERRADA, MARGEN = 2794, 3851, 60
 RECORTE = 0.10           # se reduce un 10% el rango útil, repartido en ambos extremos
@@ -252,8 +260,10 @@ except Aborto as e:
     print(f"\nABORTADO: {e}")
 finally:
     try:
+        escribir(98, 1, 0)                      # primero el watchdog: disparado, rechaza la escritura del torque
         escribir(64, 1, 0)
-        escribir(98, 1, 0)
+        if leer(64, 1):
+            raise Aborto("el torque sigue encendido")
         print("Torque apagado")
     except Aborto:
         print("No pude confirmar el apagado del torque: desconecta la alimentación del motor")

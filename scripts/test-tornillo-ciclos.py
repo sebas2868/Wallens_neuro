@@ -4,12 +4,20 @@
 la búsqueda de topes, y mide tiempo, error de llegada y corriente máxima de cada tramo.
 Aborta y apaga el torque ante cualquier anomalía.
 Uso: python3 scripts/test-tornillo-ciclos.py [--ciclos=N] [--velocidad=N] [--aceleracion=N] [puerto]   (Ctrl+C apaga el torque)"""
-import json, os, signal, sys, time
+import subprocess, json, os, signal, sys, time
 from dynamixel_sdk import PortHandler, PacketHandler
 
 _opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
-PUERTO = _args[0] if _args else "/dev/ttyUSB0"
+PUERTO = _args[0] if _args else "/dev/dynamixel"
+
+def _servicio_activo():
+    try:
+        return subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0
+    except FileNotFoundError:               # sin systemd (PC de desarrollo)
+        return False
+if _servicio_activo():
+    sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
 ID, BAUD = 3, 57600
 CICLOS = int(_opts.get("ciclos", 3))
 VELOCIDAD = int(_opts.get("velocidad", 150))   # Profile Velocity (0.229 rpm por unidad): 150 = ~34 rpm
@@ -132,8 +140,10 @@ except (Aborto, OSError, KeyError, ValueError) as e:
     print(f"\nABORTADO: {e}")
 finally:
     try:
+        escribir(98, 1, 0)                      # primero el watchdog: disparado, rechaza la escritura del torque
         escribir(64, 1, 0)
-        escribir(98, 1, 0)
+        if leer(64, 1):
+            raise Aborto("el torque sigue encendido")
         print("Torque apagado")
     except Aborto:
         print("No pude confirmar el apagado del torque: desconecta la alimentación del motor")
