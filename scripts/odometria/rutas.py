@@ -10,6 +10,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
 from rclpy.qos import QoSProfile
+from rclpy.signals import SignalHandlerOptions
 
 RUTA = sys.argv[1] if len(sys.argv) > 1 else "avance"
 CORRIDAS = int(sys.argv[2]) if len(sys.argv) > 2 else 1
@@ -20,8 +21,9 @@ ANTICIPO_GIRO = 3.0 * ESCALA         # grados
 K_RUMBO, W_RUMBO_MAX = 1.0, 0.2   # corrección del rumbo mientras avanza
 TIEMPO_MAX = 40          # s por tramo
 BLOQUEO_MAX = 1.5        # s seguidos con el freno activo antes de abortar la ruta
+EDAD_MAX_ODOM = 0.3      # s sin /odometry/filtered: se aborta (el EKF murió)
 
-rclpy.init()
+rclpy.init(signal_handler_options=SignalHandlerOptions.NO)   # Ctrl+C llega como KeyboardInterrupt y aún se puede frenar
 n = Node("rutas")
 pub = n.create_publisher(Twist, "cmd_vel", 10)
 d = {"freno": False, "t_freno": 0.0}
@@ -32,7 +34,7 @@ def yaw(q):
 
 
 def odom(m):
-    d.update(x=m.pose.pose.position.x, y=m.pose.pose.position.y, th=yaw(m.pose.pose.orientation))
+    d.update(x=m.pose.pose.position.x, y=m.pose.pose.position.y, th=yaw(m.pose.pose.orientation), t_odom=time.monotonic())
 
 
 def freno(m):
@@ -81,6 +83,11 @@ def revisar(inicio_bloqueo):
     return None
 
 
+def revisar_odom():
+    if time.monotonic() - d["t_odom"] > EDAD_MAX_ODOM:
+        raise Abortar("sin /odometry/filtered reciente")
+
+
 def avanzar(dist):
     """Avanza (o retrocede si dist < 0) |dist| metros manteniendo el rumbo."""
     signo = 1 if dist > 0 else -1
@@ -89,6 +96,7 @@ def avanzar(dist):
     while math.hypot(d["x"] - x0, d["y"] - y0) < abs(dist) - ANTICIPO_AVANCE:
         if time.time() - inicio > TIEMPO_MAX:
             raise Abortar("tiempo agotado avanzando")
+        revisar_odom()
         bloqueo = revisar(bloqueo)
         w = max(-W_RUMBO_MAX, min(W_RUMBO_MAX, K_RUMBO * girar_ang(d["th"], th0)))
         enviar(signo * V, w)             # w>0 gira a la izquierda también yendo hacia atrás
@@ -104,6 +112,7 @@ def girar(grados):
     while abs(acum) < abs(grados) - ANTICIPO_GIRO:
         if time.time() - inicio > TIEMPO_MAX:
             raise Abortar("tiempo agotado girando")
+        revisar_odom()
         enviar(0.0, signo * W)
         rclpy.spin_once(n, timeout_sec=0.05)
         acum += math.degrees(girar_ang(previo, d["th"]))
@@ -138,7 +147,7 @@ try:
         lado = -dx * math.sin(th0) + dy * math.cos(th0)
         print(f"corrida {i}/{CORRIDAS}: EKF dice {adelante * 100:+.1f} cm adelante, {lado * 100:+.1f} cm de lado, "
               f"{math.degrees(girar_ang(th0, d['th'])):+.1f} deg de rumbo (respecto al inicio de la ruta)", flush=True)
-except Abortar as e:
+except (Abortar, KeyboardInterrupt) as e:
     frenar()
-    print(f"ABORTADA: {e}", flush=True)
+    print(f"ABORTADA: {str(e) or 'Ctrl+C'}", flush=True)
 rclpy.shutdown()
