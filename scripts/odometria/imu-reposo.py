@@ -38,4 +38,7 @@ for i, sal in enumerate(saltos):
         print(f"  salto de {sal:.1f} deg en la muestra {i + 1} (t = {tiempos[i + 1] - tiempos[0]:.2f} s): "
               f"yaw {yaws[i - 1] if i else float('nan'):+.1f} -> {yaws[i]:+.1f} -> {yaws[i + 1]:+.1f} -> "
               f"{yaws[i + 2] if i + 2 < len(yaws) else float('nan'):+.1f}")
+        for k in (i, i + 1):
+            q = muestras[k][1].orientation
+            print(f"    muestra {k}: w {q.w:+.4f} x {q.x:+.4f} y {q.y:+.4f} z {q.z:+.4f}  norma {normas[k]:.4f}")
 rclpy.shutdown()
