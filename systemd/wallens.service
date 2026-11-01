@@ -12,8 +12,10 @@ ExecStart=/home/wallens/wallens/scripts/arranque.sh
 # fuera de rango, así que reintentar no entra en un bucle peligroso. `systemctl stop` no se reinicia.
 Restart=always
 RestartSec=10
-# Mismo ROS_DOMAIN_ID en el PC y en cada shell desde la que se lancen scripts (export ROS_DOMAIN_ID=37)
-Environment=ROS_DOMAIN_ID=37
+# Red ROS: dominio 37 y descubrimiento solo en la Pi (config/ros-red.env). El PC entra con su IP en
+# ~/.config/wallens/peers.env (ROS_STATIC_PEERS=<ip>; el "-" lo hace opcional). Shells de la Pi: scripts/ros-env.sh
+EnvironmentFile=/home/wallens/wallens/config/ros-red.env
+EnvironmentFile=-/home/wallens/.config/wallens/peers.env
 # Logs de ROS en tmpfs (no en la SD); systemd crea y borra /run/wallens-log
 Environment=ROS_LOG_DIR=/run/wallens-log
 RuntimeDirectory=wallens-log

@@ -77,6 +77,28 @@ Servicio `wallens` (`systemd/wallens.service`, se instala con `sudo scripts/04-s
 Comandos: `journalctl -u wallens -f`, `sudo systemctl stop|restart wallens`. Los nodos que se lancen a mano mientras el
 servicio corre duplican tópicos (pasó con el IMU y el freno): parar primero el servicio o matar solo el propio proceso por PID.
 
+## Red ROS
+
+`config/ros-red.env` fija `ROS_DOMAIN_ID=37` y `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`: el robot solo descubre nodos de la
+propia Pi y de las IP que figuren en `ROS_STATIC_PEERS`. Un equipo del laboratorio en el mismo dominio no ve ni manda
+nada al robot salvo que su IP esté en esa lista. Lo leen el servicio (`EnvironmentFile`) y `scripts/ros-env.sh` (para cada
+shell de la Pi: `source ~/wallens/scripts/ros-env.sh`). Probado en la Pi (dominio 99): un shell sin `LOCALHOST` sigue
+viendo a los nodos con `LOCALHOST` y al revés, así que los scripts lanzados desde la Pi funcionan igual.
+
+PC: la IP del PC va en la Pi, fuera del repo, y hace falta reiniciar el servicio tras cambiarla:
+
+```bash
+# en la Pi (IP del PC con `ip -4 addr`)
+mkdir -p ~/.config/wallens && echo "ROS_STATIC_PEERS=11.11.41.48" > ~/.config/wallens/peers.env
+sudo systemctl restart wallens
+# en el PC
+ROS_STATIC_PEERS=$(scripts/pi-ip.sh) scripts/pc-ros.sh ros2 topic list
+```
+
+El PC tiene `ufw` activo, que bloquea el DDS entrante (medido 2026-11-01: ni el dominio 37 actual llega al PC, con o sin
+peers). Para dejar pasar solo a la Pi: `sudo ufw allow from <ip pi> proto udp to any port 16650:16899` (puertos DDS del
+dominio 37: 7400 + 250 × 37 en adelante). Sin probar todavía de punta a punta por ese motivo.
+
 ## CPU
 
 El bus I²C por software espera bit a bit en el kernel. Medido con el servicio completo: núcleo 3 a ~26 % (solo el IMU, fijado con
