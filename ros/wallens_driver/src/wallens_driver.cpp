@@ -120,10 +120,11 @@ class WallensDriver : public rclcpp::Node {
         throw Fatal("El ID " + std::to_string(r->id) + " no es un XM430-W210 (modelo " + std::to_string(modelo) + ")");
       }
       escribir1(r->id, DIR_TORQUE, 0);           // torque off para cambiar el modo
+      escribir1(r->id, DIR_WATCHDOG, 0);         // limpia un watchdog disparado antes: con él activo (255) el motor
+                                                 // rechaza las demás escrituras (tras reiniciar la Pi pasa siempre)
       escribir1(r->id, DIR_MODO, MODO_VELOCIDAD);
       escribir4(r->id, DIR_ACELERACION, static_cast<uint32_t>(aceleracion_));
       escribir4(r->id, DIR_VELOCIDAD_META, 0);
-      escribir1(r->id, DIR_WATCHDOG, 0);         // limpia un watchdog disparado antes
       motores_activos_ = true;
       escribir1(r->id, DIR_TORQUE, 1);
       escribir1(r->id, DIR_WATCHDOG, static_cast<uint8_t>(watchdog_));

@@ -1,0 +1,10 @@
+freno_lidar:
+  ros__parameters:
+    stop_distance: 0.30         # m medidos desde el LiDAR; por debajo se anula el avance
+    hysteresis: 0.05            # m extra para soltar el freno (frena a 0.30, suelta a 0.35)
+    half_angle_deg: 40.0        # semiancho del sector vigilado, al frente (avanzando) o atrás (retrocediendo)
+    laser_yaw_deg: -90.0        # yaw de base_laser respecto a base_link (el cero del LiDAR apunta a la izquierda)
+    min_range: 0.06             # m; lecturas más cortas se ignoran (ruido, reflejos del chasis)
+    scan_timeout: 1.0           # s sin /scan: se bloquea el avance (no se sabe si hay obstáculo)
+    require_scan: true          # false deja avanzar sin LiDAR (solo para pruebas)
+    cmd_timeout: 0.5            # s sin /cmd_vel: no se republica nada (el driver frena solo)
