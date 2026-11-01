@@ -13,9 +13,10 @@ from rclpy.qos import QoSProfile
 
 RUTA = sys.argv[1] if len(sys.argv) > 1 else "avance"
 CORRIDAS = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-V, W = 0.10, 0.3         # m/s, rad/s
-ANTICIPO_AVANCE = 0.02   # m antes del objetivo en que se manda frenar (la rampa recorre unos cm más)
-ANTICIPO_GIRO = 3.0      # grados
+ESCALA = 1.2             # sobre la velocidad base 0.10 m/s y 0.3 rad/s (la rampa de frenado crece con ella)
+V, W = 0.10 * ESCALA, 0.3 * ESCALA   # m/s, rad/s
+ANTICIPO_AVANCE = 0.02 * ESCALA      # m antes del objetivo en que se manda frenar (la rampa recorre unos cm más)
+ANTICIPO_GIRO = 3.0 * ESCALA         # grados
 K_RUMBO, W_RUMBO_MAX = 1.0, 0.2   # corrección del rumbo mientras avanza
 TIEMPO_MAX = 40          # s por tramo
 BLOQUEO_MAX = 1.5        # s seguidos con el freno activo antes de abortar la ruta
