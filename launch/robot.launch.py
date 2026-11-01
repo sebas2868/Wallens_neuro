@@ -17,7 +17,8 @@ def generate_launch_description():
     return incluir(os.path.join(get_package_share_directory(nombre), 'launch', archivo))
 
   return LaunchDescription([
-      # Las ruedas son críticas: si el driver muere se cierra todo y systemd reintenta (con el chequeo previo)
+      # Las ruedas son críticas: si el driver muere se cierra todo y systemd lo vuelve a lanzar (Restart=always,
+      # con el chequeo previo); el driver sale con 1 en un fallo, pero ros2 launch puede devolver 0 igualmente
       Node(package='wallens_driver', executable='wallens_driver', name='wallens_driver', output='screen',
            parameters=[os.path.join(get_package_share_directory('wallens_driver'), 'config', 'wallens_driver.yaml')],
            remappings=[('cmd_vel', 'cmd_vel_safe')],      # el driver solo oye lo que pasa por el freno

@@ -189,6 +189,9 @@ class WallensDriver : public rclcpp::Node {
     if (port_) port_->closePort();
   }
 
+  // true si el driver se apagó solo por un fallo (no por Ctrl+C o SIGINT): main sale con código 1
+  bool fallo_fatal() const { return fallo_fatal_; }
+
  private:
   void ciclo() {
     const auto ahora = std::chrono::steady_clock::now();
@@ -199,11 +202,13 @@ class WallensDriver : public rclcpp::Node {
       fallos_ = 0;
     } catch (const Fatal& e) {
       RCLCPP_FATAL(get_logger(), "%s: se apaga el driver", e.what());
+      fallo_fatal_ = true;
       apagar();
       rclcpp::shutdown();
     } catch (const std::exception& e) {
       if (++fallos_ >= max_fallos_) {
         RCLCPP_FATAL(get_logger(), "%d fallos seguidos (%s): se apaga el driver", fallos_, e.what());
+        fallo_fatal_ = true;
         apagar();
         rclcpp::shutdown();
       } else {
@@ -388,6 +393,7 @@ class WallensDriver : public rclcpp::Node {
   // estado
   double cmd_v_ = 0.0, cmd_w_ = 0.0;
   bool hay_cmd_ = false;
+  bool fallo_fatal_ = false;
   bool bateria_critica_ = false;
   bool parada_ = false;
   bool hay_bateria_ = false;
@@ -423,5 +429,5 @@ int main(int argc, char** argv) {
   }
   if (nodo) nodo->apagar();                      // Ctrl+C, fallo al iniciar o fallo en marcha
   rclcpp::shutdown();
-  return codigo;
+  return (nodo && nodo->fallo_fatal()) ? 1 : codigo;
 }

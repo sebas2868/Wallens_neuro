@@ -7,9 +7,16 @@ User=wallens
 # Todo en los núcleos 0-2; el IMU se fija al 3 con taskset en imu.launch.py
 CPUAffinity=0 1 2
 ExecStart=/home/wallens/wallens/scripts/arranque.sh
-# Si el chequeo previo falla (motores o voltaje), reintenta cada 10 s
-Restart=on-failure
+# Reintenta siempre cada 10 s, también si el driver se apagó solo (USB, riel de 12 V): ros2 launch puede terminar con
+# código 0 aunque el driver salga con 1. El chequeo previo bloquea el arranque si hay error de hardware o el voltaje está
+# fuera de rango, así que reintentar no entra en un bucle peligroso. `systemctl stop` no se reinicia.
+Restart=always
 RestartSec=10
+# Mismo ROS_DOMAIN_ID en el PC y en cada shell desde la que se lancen scripts (export ROS_DOMAIN_ID=37)
+Environment=ROS_DOMAIN_ID=37
+# Logs de ROS en tmpfs (no en la SD); systemd crea y borra /run/wallens-log
+Environment=ROS_LOG_DIR=/run/wallens-log
+RuntimeDirectory=wallens-log
 KillSignal=SIGINT
 TimeoutStopSec=15
 
