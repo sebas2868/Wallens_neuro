@@ -100,6 +100,12 @@ def distancia_pasillo(puntos, huella, margen_lateral, adelante=True):
     return mejor
 
 
+# Lo que un punto debe acercarse a la huella al girar para contar. El chasis redondo es un polígono de 16 lados: al
+# girar sus esquinas avanzan hasta R(1 - cos(pi/16)) = 2.8 mm, y un objeto quieto junto al costado redondo
+# parecería acercarse en los dos sentidos (en la prueba sobre tacos bloqueaba también el giro que aleja el gripper).
+ACERCAMIENTO_MIN = 0.005
+
+
 def choque_al_girar(puntos, w, huella, margen, horizonte, pasos=6):
     """True si al girar en el sitio a w rad/s durante `horizonte` s la huella barre algún punto que hoy está fuera de
     ella, o lo deja a menos de `margen` acercándolo. Los puntos que ya están dentro (reflejos del propio chasis) no
@@ -110,7 +116,7 @@ def choque_al_girar(puntos, w, huella, margen, horizonte, pasos=6):
     for x, y in puntos:
         if x * x + y * y > radio2 or dentro(huella, x, y):
             continue
-        previa = distancia_al_borde(huella, x, y)
+        inicial = distancia_al_borde(huella, x, y)
         for k in range(1, pasos + 1):
             th = giro * k / pasos               # el punto, visto desde el robot ya girado th
             xr = x * math.cos(th) + y * math.sin(th)
@@ -118,9 +124,8 @@ def choque_al_girar(puntos, w, huella, margen, horizonte, pasos=6):
             if dentro(huella, xr, yr):
                 return True
             dist = distancia_al_borde(huella, xr, yr)
-            if dist < margen and dist < previa - 1e-4:
+            if dist < margen and dist < inicial - ACERCAMIENTO_MIN:
                 return True
-            previa = dist
     return False
 
 

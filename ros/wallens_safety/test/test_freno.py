@@ -302,3 +302,17 @@ def test_huella_giro_con_histeresis():
     f2 = con_huella()
     assert ciclo_con(f2, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]
     assert not ciclo_con(f2, 0.0, 0.3, [(0.5, 0.5)], t=10.1)[2]          # el objeto se fue: suelta
+
+
+def test_huella_objeto_junto_al_costado_redondo_deja_girar():
+    # a 3 cm del borde redondo, detrás y a la derecha (como en la prueba sobre tacos): girar no lo acerca al chasis
+    # redondo; las esquinas del polígono de 16 lados no deben contar como acercamiento
+    for w in (0.3, -0.3):
+        v, wo, bloqueado, _ = ciclo_con(con_huella(), 0.0, w, [(-0.150, -0.099)])
+        assert not bloqueado and wo == w, w
+
+
+def test_huella_caja_junto_al_gripper_solo_frena_el_giro_que_lo_acerca():
+    caja = [(-0.21, -0.062), (-0.19, -0.069), (-0.17, -0.079), (-0.150, -0.099)]   # medida en la prueba sobre tacos
+    assert ciclo_con(con_huella(), 0.0, 0.3, caja)[2]
+    assert not ciclo_con(con_huella(), 0.0, -0.3, caja)[2]
