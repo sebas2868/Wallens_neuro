@@ -187,3 +187,82 @@ def test_vigilante_sin_ningun_scan_cuenta_desde_el_arranque():
     v = Vigilante(5.0, 15.0, inicio=100.0)
     assert not v.debe_reiniciar(104.0)
     assert v.debe_reiniciar(105.5)
+
+
+# --- Modo huella (#6a, #6b): pasillo del ancho del robot y barrido al girar ---
+HUELLA = (0.27, -0.15, 0.16)      # frente, cola, semiancho en base_link (los de wallens_safety.yaml)
+LASER_X = 0.108
+
+
+def scan_con_puntos(puntos, fondo=LEJOS):
+    """Vuelta del LiDAR con `fondo` en todas partes y un objeto en cada (x, y) de base_link (3 haces cada uno)."""
+    rangos = [fondo] * N
+    for x, y in puntos:
+        xl, yl = x - LASER_X, y
+        a = math.atan2(yl, xl) - YAW
+        i = round(a / INC) % N
+        for k in (-1, 0, 1):
+            rangos[(i + k) % N] = math.hypot(xl, yl)
+    return rangos
+
+
+def con_huella(**kw):
+    return nuevo(dist=0.15, huella=HUELLA, laser_x=LASER_X, **kw)
+
+
+def ciclo_con(f, v, w, puntos, t=10.0):
+    con_scan(f, scan_con_puntos(puntos), t)
+    assert f.on_cmd(v, w, t)
+    return f.ciclo(t)
+
+
+def test_huella_obstaculo_en_el_pasillo_frena_y_lejos_no():
+    assert ciclo_con(con_huella(), 0.05, 0.0, [(0.27 + 0.10, 0.0)])[2]
+    assert not ciclo_con(con_huella(), 0.05, 0.0, [(0.27 + 0.40, 0.0)])[2]
+
+
+def test_huella_esquina_del_pasillo_frena_aunque_el_cono_no_la_vea():
+    # a 12 cm del frente y en el borde del ancho: fuera del cono de ±40° visto desde el LiDAR cercano
+    r = ciclo_con(con_huella(), 0.05, 0.0, [(0.27 + 0.12, 0.17)])
+    assert r[2] and r[0] == 0.0
+
+
+def test_huella_objeto_a_un_lado_no_frena_el_avance():
+    r = ciclo_con(con_huella(), 0.05, 0.0, [(0.30, 0.30)])
+    assert not r[2] and r[0] == 0.05
+
+
+def test_huella_giro_bloqueado_si_barre_un_obstaculo():
+    # junto a la esquina delantera izquierda: girar a la izquierda la mete dentro de la huella
+    v, w, bloqueado, motivo = ciclo_con(con_huella(), 0.0, 0.5, [(0.25, 0.20)])
+    assert bloqueado and w == 0.0 and "girar" in motivo
+
+
+def test_huella_giro_libre_con_obstaculo_lejos():
+    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.0, 0.5, [(0.60, 0.40)])
+    assert not bloqueado and w == 0.5
+
+
+def test_huella_reflejos_del_chasis_no_frenan():
+    r = ciclo_con(con_huella(), 0.05, 0.5, [(0.20, 0.05), (0.0, -0.10)])     # puntos dentro de la huella
+    assert not r[2] and (r[0], r[1]) == (0.05, 0.5)
+
+
+def test_huella_lidar_tapado_bloquea_avance():
+    f = con_huella()
+    con_scan(f, scan(frente=0.0), 10.0)
+    f.on_cmd(0.05, 0.0, 10.0)
+    r = f.ciclo(10.0)
+    assert r[2] and r[0] == 0.0
+
+
+def test_huella_sin_scan_bloquea_el_giro():
+    f = con_huella()
+    f.on_cmd(0.0, 0.5, 10.0)
+    v, w, bloqueado, _ = f.ciclo(10.0)
+    assert bloqueado and w == 0.0
+
+
+def test_huella_curva_frena_avance_y_deja_giro_libre():
+    v, w, bloqueado, _ = ciclo_con(con_huella(), 0.05, 0.3, [(0.27 + 0.05, 0.0)])
+    assert bloqueado and v == 0.0 and w == 0.3        # obstáculo delante (no en el barrido): puede girar para salir
