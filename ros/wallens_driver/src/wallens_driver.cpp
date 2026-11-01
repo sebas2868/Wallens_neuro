@@ -16,6 +16,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/battery_state.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "tf2_ros/transform_broadcaster.h"
 
@@ -71,6 +72,7 @@ class WallensDriver : public rclcpp::Node {
     max_angular_ = declare_parameter("max_angular", 1.0);
     max_rpm_ = declare_parameter("max_wheel_rpm", 60.0);
     cmd_timeout_ = declare_parameter("cmd_timeout", 0.25);
+    bateria_timeout_ = declare_parameter("battery_timeout", 2.0);   // s sin /battery_state para frenar; <= 0 lo desactiva (banco sin INA226)
     aceleracion_ = declare_parameter("profile_acceleration", 20);
     watchdog_ = declare_parameter("bus_watchdog", 10);
     voltaje_min_ = declare_parameter("voltage_min", 10.0);
@@ -87,6 +89,10 @@ class WallensDriver : public rclcpp::Node {
 
     sub_cmd_ = create_subscription<geometry_msgs::msg::Twist>(
         "cmd_vel", 10, [this](geometry_msgs::msg::Twist::ConstSharedPtr m) {
+          if (!std::isfinite(m->linear.x) || !std::isfinite(m->angular.z)) {
+            RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 2000, "cmd_vel no finito: se descarta");
+            return;
+          }
           cmd_v_ = m->linear.x;
           cmd_w_ = m->angular.z;
           ultimo_cmd_ = std::chrono::steady_clock::now();
@@ -99,6 +105,12 @@ class WallensDriver : public rclcpp::Node {
             RCLCPP_WARN(get_logger(), m->data ? "Batería crítica: las ruedas se frenan" : "Batería recuperada");
           }
           bateria_critica_ = m->data;
+        });
+    // Sin lecturas recientes de wallens_power (muerto, INA226 ausente) no se sabe si la batería aguanta: se frena
+    sub_estado_bateria_ = create_subscription<sensor_msgs::msg::BatteryState>(
+        "battery_state", 10, [this](sensor_msgs::msg::BatteryState::ConstSharedPtr) {
+          ultima_bateria_ = std::chrono::steady_clock::now();
+          hay_bateria_ = true;
         });
     pub_odom_ = create_publisher<nav_msgs::msg::Odometry>("odom", 10);
     if (publicar_tf_) tf_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -188,7 +200,18 @@ class WallensDriver : public rclcpp::Node {
 
   void mandar_velocidades(std::chrono::steady_clock::time_point ahora) {
     double v = 0.0, w = 0.0;
-    if (!bateria_critica_ && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
+    const bool bateria_ok = !bateria_critica_ && (bateria_timeout_ <= 0 ||
+        (hay_bateria_ && std::chrono::duration<double>(ahora - ultima_bateria_).count() <= bateria_timeout_));
+    if (bateria_ok != bateria_ok_previa_) {
+      if (bateria_ok) {
+        RCLCPP_INFO(get_logger(), "Hay /battery_state reciente y la batería no es crítica: las ruedas pueden moverse");
+      } else if (!bateria_critica_) {
+        RCLCPP_WARN(get_logger(), "Sin /battery_state reciente (límite %.1f s; ¿wallens_power caído o INA226 ausente?): las ruedas se frenan",
+                    bateria_timeout_);
+      }
+      bateria_ok_previa_ = bateria_ok;
+    }
+    if (bateria_ok && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
       v = std::clamp(cmd_v_, -max_lineal_, max_lineal_);
       w = std::clamp(cmd_w_, -max_angular_, max_angular_);
     }
@@ -352,6 +375,10 @@ class WallensDriver : public rclcpp::Node {
   double cmd_v_ = 0.0, cmd_w_ = 0.0;
   bool hay_cmd_ = false;
   bool bateria_critica_ = false;
+  bool hay_bateria_ = false;
+  bool bateria_ok_previa_ = true;
+  double bateria_timeout_ = 2.0;
+  std::chrono::steady_clock::time_point ultima_bateria_;
   std::chrono::steady_clock::time_point ultimo_cmd_, t_previo_;
   bool odom_iniciada_ = false;
   double x_ = 0.0, y_ = 0.0, th_ = 0.0;
@@ -360,6 +387,7 @@ class WallensDriver : public rclcpp::Node {
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_bateria_;
+  rclcpp::Subscription<sensor_msgs::msg::BatteryState>::SharedPtr sub_estado_bateria_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_;
   rclcpp::TimerBase::SharedPtr timer_;
