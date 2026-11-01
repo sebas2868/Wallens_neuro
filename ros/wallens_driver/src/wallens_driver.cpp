@@ -31,8 +31,8 @@ constexpr uint16_t DIR_ERROR_HW = 70;
 constexpr uint16_t DIR_WATCHDOG = 98;
 constexpr uint16_t DIR_VELOCIDAD_META = 104;
 constexpr uint16_t DIR_ACELERACION = 108;
-constexpr uint16_t DIR_LECTURA = 126;    // corriente (2), velocidad (4) y posición (4) seguidas
-constexpr uint16_t LARGO_LECTURA = 10;
+constexpr uint16_t DIR_LECTURA = 126;    // 126..146: corriente, velocidad, posición, trayectorias, voltaje y temperatura
+constexpr uint16_t LARGO_LECTURA = 21;
 constexpr uint16_t DIR_POSICION = 132;
 constexpr uint16_t DIR_VOLTAJE = 144;
 constexpr uint16_t DIR_TEMPERATURA = 146;
@@ -331,10 +331,14 @@ class WallensDriver : public rclcpp::Node {
     }
   }
 
+  // Usa los datos del sync read del mismo ciclo (leer_y_publicar), sin lecturas sueltas por el bus.
   void revisar_salud() {
     for (Rueda* r : {&izq_, &der_}) {
-      const double voltaje = leer2(r->id, DIR_VOLTAJE) / 10.0;
-      const int temp = leer1(r->id, DIR_TEMPERATURA);
+      if (!sync_lectura_->isAvailable(r->id, DIR_VOLTAJE, 2) || !sync_lectura_->isAvailable(r->id, DIR_TEMPERATURA, 1)) {
+        throw std::runtime_error("El motor " + std::to_string(r->id) + " no entregó el voltaje o la temperatura");
+      }
+      const double voltaje = sync_lectura_->getData(r->id, DIR_VOLTAJE, 2) / 10.0;
+      const int temp = static_cast<int>(sync_lectura_->getData(r->id, DIR_TEMPERATURA, 1));
       if (voltaje < voltaje_min_ || voltaje > voltaje_max_) {
         throw Fatal("Motor " + std::to_string(r->id) + ": voltaje " + std::to_string(voltaje) + " V fuera de rango");
       }
