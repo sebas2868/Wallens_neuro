@@ -1,7 +1,8 @@
 // Driver de las ruedas de Wallens: dueño único del bus Dynamixel (XM430-W210, protocolo 2.0).
 // Escucha /cmd_vel, mueve las ruedas en modo velocidad y publica /odom y el TF odom -> base_link.
 // Si pierde /cmd_vel o la comunicación frena, y al salir apaga el torque (verificándolo). Frena también con
-// /parada, sin /battery_state reciente y con comandos no finitos.
+// /parada, sin /battery_state reciente y con comandos no finitos. Detecta el watchdog del bus disparado (registro 98),
+// lo rearma y lo registra.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -33,11 +34,13 @@ constexpr uint16_t DIR_VELOCIDAD_META = 104;
 constexpr uint16_t DIR_ACELERACION = 108;
 constexpr uint16_t DIR_LECTURA = 126;    // 126..146: corriente, velocidad, posición, trayectorias, voltaje y temperatura
 constexpr uint16_t LARGO_LECTURA = 21;
+constexpr uint16_t DIR_VELOCIDAD = 128;
 constexpr uint16_t DIR_POSICION = 132;
 constexpr uint16_t DIR_VOLTAJE = 144;
 constexpr uint16_t DIR_TEMPERATURA = 146;
 constexpr uint8_t MODO_VELOCIDAD = 1;
 constexpr uint8_t ALERTA_HW = 0x80;      // bit de error de hardware en el paquete de estado
+constexpr uint8_t WATCHDOG_DISPARADO = 0xFF;  // el registro 98 vale -1 tras 200 ms sin comunicación
 constexpr double RPM_POR_UNIDAD = 0.229;
 constexpr double TICKS_VUELTA = 4096.0;
 constexpr double DOS_PI = 2.0 * M_PI;
@@ -53,6 +56,9 @@ struct Rueda {
   double k;                // corrección de velocidad
   int32_t pos_previa = 0;
   int32_t pos = 0;
+  int32_t meta = 0;        // velocidad pedida en el último ciclo (unidades de 0.229 rpm, con signo del motor)
+  int32_t vel = 0;         // velocidad leída
+  double sin_seguir = 0;   // s seguidos en que la rueda no sigue la velocidad pedida
 };
 
 }  // namespace
@@ -80,6 +86,7 @@ class WallensDriver : public rclcpp::Node {
     voltaje_max_ = declare_parameter("voltage_max", 14.8);
     temp_max_ = declare_parameter("temp_max", 55);
     max_fallos_ = declare_parameter("max_failures", 5);
+    max_disparos_ = declare_parameter("max_watchdog_trips", 3);     // disparos del watchdog en 60 s antes de apagar el nodo
     marco_odom_ = declare_parameter("odom_frame", "odom");
     marco_base_ = declare_parameter("base_frame", "base_link");
     publicar_tf_ = declare_parameter("publish_tf", true);
@@ -198,7 +205,10 @@ class WallensDriver : public rclcpp::Node {
     try {
       mandar_velocidades(ahora);
       leer_y_publicar(ahora);
-      if (++ciclos_ % std::max(1, static_cast<int>(loop_hz_)) == 0) revisar_salud();
+      if (++ciclos_ % std::max(1, static_cast<int>(loop_hz_)) == 0) {
+        revisar_salud();
+        revisar_watchdog(ahora);
+      }
       fallos_ = 0;
     } catch (const Fatal& e) {
       RCLCPP_FATAL(get_logger(), "%s: se apaga el driver", e.what());
@@ -230,7 +240,8 @@ class WallensDriver : public rclcpp::Node {
       }
       bateria_ok_previa_ = bateria_ok;
     }
-    if (!parada_ && bateria_ok && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
+    // tras rearmar el watchdog se espera 1 s parado antes de obedecer otra vez a /cmd_vel_safe
+    if (!parada_ && bateria_ok && rearme_hasta_ <= ahora && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
       v = std::clamp(cmd_v_, -max_lineal_, max_lineal_);
       w = std::clamp(cmd_w_, -max_angular_, max_angular_);
     }
@@ -245,6 +256,7 @@ class WallensDriver : public rclcpp::Node {
     sync_escritura_->clearParam();
     for (auto [r, rpm] : {std::pair{&izq_, rpm_izq}, std::pair{&der_, rpm_der}}) {
       const auto unidades = static_cast<int32_t>(std::lround(r->signo * rpm * r->k / RPM_POR_UNIDAD));
+      r->meta = unidades;
       const auto u = static_cast<uint32_t>(unidades);
       uint8_t datos[4] = {static_cast<uint8_t>(u), static_cast<uint8_t>(u >> 8),
                           static_cast<uint8_t>(u >> 16), static_cast<uint8_t>(u >> 24)};
@@ -269,6 +281,7 @@ class WallensDriver : public rclcpp::Node {
         throw std::runtime_error("El motor " + std::to_string(r->id) + " no entregó la posición");
       }
       r->pos = static_cast<int32_t>(sync_lectura_->getData(r->id, DIR_POSICION, 4));
+      r->vel = static_cast<int32_t>(sync_lectura_->getData(r->id, DIR_VELOCIDAD, 4));
     }
     if (!odom_iniciada_) {                       // primera lectura: solo fija el punto de partida
       izq_.pos_previa = izq_.pos;
@@ -279,6 +292,11 @@ class WallensDriver : public rclcpp::Node {
     }
     const double dt = std::chrono::duration<double>(ahora - t_previo_).count();
     t_previo_ = ahora;
+    if (dt > 3.0 / loop_hz_) {                   // un ciclo tardío acerca el watchdog del bus (200 ms): carga de CPU
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Ciclo tardío: %.0f ms entre lecturas (esperado %.0f)",
+                           dt * 1000.0, 1000.0 / loop_hz_);
+    }
+    vigilar_seguimiento(dt);
     // metros que avanzó cada rueda (el signo la lleva a "hacia adelante")
     const double d_izq = izq_.signo * ticks_entre(izq_.pos_previa, izq_.pos) / TICKS_VUELTA * DOS_PI * radio_;
     const double d_der = der_.signo * ticks_entre(der_.pos_previa, der_.pos) / TICKS_VUELTA * DOS_PI * radio_;
@@ -328,6 +346,43 @@ class WallensDriver : public rclcpp::Node {
       t.transform.translation.y = y_;
       t.transform.rotation = o.pose.pose.orientation;
       tf_->sendTransform(t);
+    }
+  }
+
+  // Una rueda que no sigue la velocidad pedida durante 1 s (meta > 5 rpm, leída < 20 % de la meta) es el síntoma de un
+  // watchdog disparado (el motor rechaza las escrituras de velocidad y el sync write no lee respuesta) o de una rueda
+  // trabada. Solo avisa; el registro 98 se comprueba en revisar_salud().
+  void vigilar_seguimiento(double dt) {
+    for (Rueda* r : {&izq_, &der_}) {
+      const bool sigue = std::abs(r->meta) * RPM_POR_UNIDAD < 5.0 || std::abs(r->vel) >= 0.2 * std::abs(r->meta);
+      r->sin_seguir = sigue ? 0.0 : r->sin_seguir + dt;
+      if (r->sin_seguir > 1.0) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                             "La rueda %d no sigue la velocidad pedida (meta %.1f rpm, leída %.1f rpm) desde hace %.1f s",
+                             r->id, r->meta * RPM_POR_UNIDAD, r->vel * RPM_POR_UNIDAD, r->sin_seguir);
+      }
+    }
+  }
+
+  // Si el watchdog del bus saltó (registro 98 = -1) el motor queda parado y rechaza la velocidad sin que el sync write
+  // se entere. Se limpia y se rearma, y las ruedas quedan 1 s a 0 antes de obedecer otra vez. Demasiados disparos
+  // seguidos (max_watchdog_trips en 60 s) apagan el driver: systemd reinicia el servicio.
+  void revisar_watchdog(std::chrono::steady_clock::time_point ahora) {
+    for (Rueda* r : {&izq_, &der_}) {
+      if (leer1(r->id, DIR_WATCHDOG) != WATCHDOG_DISPARADO) continue;
+      disparos_.push_back(ahora);
+      while (!disparos_.empty() && ahora - disparos_.front() > std::chrono::seconds(60)) disparos_.erase(disparos_.begin());
+      ++disparos_total_;
+      RCLCPP_ERROR(get_logger(), "Watchdog del bus disparado en el motor %d (%d en el último minuto, %ld desde el arranque)",
+                   r->id, static_cast<int>(disparos_.size()), disparos_total_);
+      if (static_cast<int>(disparos_.size()) >= max_disparos_) {
+        throw Fatal("El watchdog del bus saltó " + std::to_string(disparos_.size()) + " veces en 60 s");
+      }
+      escribir1(r->id, DIR_WATCHDOG, 0);         // limpia el disparo: vuelve a aceptar la velocidad
+      escribir4(r->id, DIR_VELOCIDAD_META, 0);
+      escribir1(r->id, DIR_WATCHDOG, static_cast<uint8_t>(watchdog_));
+      rearme_hasta_ = ahora + std::chrono::seconds(1);
+      RCLCPP_WARN(get_logger(), "Watchdog del motor %d rearmado; ruedas a 0 durante 1 s", r->id);
     }
   }
 
@@ -382,7 +437,7 @@ class WallensDriver : public rclcpp::Node {
 
   // parámetros
   std::string puerto_, marco_odom_, marco_base_;
-  int baudrate_, aceleracion_, watchdog_, temp_max_, max_fallos_;
+  int baudrate_, aceleracion_, watchdog_, temp_max_, max_fallos_, max_disparos_;
   double loop_hz_, radio_, separacion_, max_lineal_, max_angular_, max_rpm_, cmd_timeout_, voltaje_min_, voltaje_max_;
   bool publicar_tf_;
 
@@ -409,6 +464,9 @@ class WallensDriver : public rclcpp::Node {
   double x_ = 0.0, y_ = 0.0, th_ = 0.0;
   int fallos_ = 0;
   long ciclos_ = 0;
+  std::vector<std::chrono::steady_clock::time_point> disparos_;   // disparos del watchdog en los últimos 60 s
+  long disparos_total_ = 0;
+  std::chrono::steady_clock::time_point rearme_hasta_{};
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_bateria_;

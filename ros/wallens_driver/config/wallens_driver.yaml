@@ -25,6 +25,7 @@ wallens_driver:
     voltage_max: 14.8
     temp_max: 55                # °C
     max_failures: 5             # ciclos seguidos sin comunicación antes de apagar el nodo
+    max_watchdog_trips: 3       # disparos del watchdog del bus en 60 s antes de apagar el nodo (cada uno se rearma solo)
 
     odom_frame: odom
     base_frame: base_link
