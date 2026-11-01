@@ -70,7 +70,7 @@ class WallensDriver : public rclcpp::Node {
     max_lineal_ = declare_parameter("max_linear", 0.15);
     max_angular_ = declare_parameter("max_angular", 1.0);
     max_rpm_ = declare_parameter("max_wheel_rpm", 60.0);
-    cmd_timeout_ = declare_parameter("cmd_timeout", 0.5);
+    cmd_timeout_ = declare_parameter("cmd_timeout", 0.25);
     aceleracion_ = declare_parameter("profile_acceleration", 20);
     watchdog_ = declare_parameter("bus_watchdog", 10);
     voltaje_min_ = declare_parameter("voltage_min", 10.0);

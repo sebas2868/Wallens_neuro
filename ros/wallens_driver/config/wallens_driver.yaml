@@ -16,7 +16,7 @@ wallens_driver:
     max_linear: 0.15            # m/s
     max_angular: 1.0            # rad/s
     max_wheel_rpm: 60.0         # tope por rueda; si se pasa, se escalan las dos (la curva se conserva)
-    cmd_timeout: 0.5            # s sin /cmd_vel para frenar
+    cmd_timeout: 0.25           # s sin /cmd_vel_safe para frenar (el freno republica a 30 Hz, así que no hay huecos)
     profile_acceleration: 20    # rampa del motor (214.577 rev/min² por unidad), ~0.5 s hasta 40 rpm
     bus_watchdog: 10            # 20 ms por unidad: 200 ms sin comunicación detiene el motor
 

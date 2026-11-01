@@ -25,9 +25,9 @@ class FrenoLidar(Node):
             semiancho=math.radians(self.declare_parameter("half_angle_deg", 40.0).value),
             yaw=math.radians(self.declare_parameter("laser_yaw_deg", -90.0).value),
             minimo=self.declare_parameter("min_range", 0.06).value,
-            scan_timeout=self.declare_parameter("scan_timeout", 1.0).value,
+            scan_timeout=self.declare_parameter("scan_timeout", 0.3).value,
             requiere_scan=self.declare_parameter("require_scan", True).value,
-            cmd_timeout=self.declare_parameter("cmd_timeout", 0.5).value,
+            cmd_timeout=self.declare_parameter("cmd_timeout", 0.25).value,
             histeresis=self.declare_parameter("hysteresis", 0.05).value,
             min_lecturas=self.declare_parameter("min_valid_readings", 10).value)
         self.estado_publicado = False

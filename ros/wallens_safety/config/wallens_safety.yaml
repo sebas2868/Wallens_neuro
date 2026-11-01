@@ -5,7 +5,7 @@ freno_lidar:
     half_angle_deg: 40.0        # semiancho del sector vigilado, al frente (avanzando) o atrás (retrocediendo)
     laser_yaw_deg: -90.0        # yaw de base_laser respecto a base_link (el cero del LiDAR apunta a la izquierda)
     min_range: 0.06             # m; lecturas más cortas se ignoran (ruido, reflejos del chasis)
-    scan_timeout: 1.0           # s sin /scan: se bloquea el avance (no se sabe si hay obstáculo)
+    scan_timeout: 0.3           # s sin /scan (3 vueltas del LD19 perdidas): se bloquea el avance (no se sabe si hay obstáculo)
     min_valid_readings: 10      # lecturas válidas mínimas en el sector; con menos (LiDAR tapado) se bloquea el avance
     require_scan: true          # false deja avanzar sin LiDAR (solo para pruebas)
-    cmd_timeout: 0.5            # s sin /cmd_vel: no se republica nada (el driver frena solo)
+    cmd_timeout: 0.25           # s sin /cmd_vel: no se republica nada (el driver frena solo); Nav2 y los scripts publican a >= 10 Hz
