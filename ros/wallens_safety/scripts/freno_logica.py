@@ -142,7 +142,8 @@ class Freno:
         self.puntos = []
         self.cono_ok = {True: False, False: False}   # el cono delantero/trasero tiene lecturas válidas suficientes
         self.frenando_giro = False
-        self.cache_giro = (None, None, False)      # (t_scan, w, choque): el giro se evalúa una vez por scan y velocidad
+        self.w_frenado = 0.0                       # giro pedido cuando se frenó (para la histéresis del giro)
+        self.cache_giro = (None, None, None, False)  # (t_scan, w, margen, choque): una evaluación por scan y velocidad
         self.t_scan = -math.inf
         self.v = self.w = 0.0
         self.t_cmd = -math.inf
@@ -193,10 +194,14 @@ class Freno:
                 self.frenando_giro = True
                 motivo = motivo or "sin /scan reciente (giro)"
             else:
-                if self.cache_giro[:2] != (self.t_scan, w):
-                    choque = choque_al_girar(self.puntos, w, self.huella, self.margen_giro, self.horizonte_giro)
-                    self.cache_giro = (self.t_scan, w, choque)
-                self.frenando_giro = self.cache_giro[2]
+                # histéresis: frenado el giro en un sentido, se suelta solo con histeresis de margen extra (un objeto
+                # en el límite haría frenar y soltar a cada scan); el sentido contrario aleja y usa el margen normal
+                margen = self.margen_giro + (self.histeresis if self.frenando_giro and w * self.w_frenado > 0 else 0.0)
+                if self.cache_giro[:3] != (self.t_scan, w, margen):
+                    choque = choque_al_girar(self.puntos, w, self.huella, margen, self.horizonte_giro)
+                    self.cache_giro = (self.t_scan, w, margen, choque)
+                self.frenando_giro = self.cache_giro[3]
+                self.w_frenado = w if self.frenando_giro else 0.0
                 if self.frenando_giro:
                     motivo = (motivo + "; " if motivo else "") + "la huella barrería un obstáculo al girar"
             if self.frenando_giro:

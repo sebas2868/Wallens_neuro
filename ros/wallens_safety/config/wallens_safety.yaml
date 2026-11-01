@@ -11,7 +11,7 @@ freno_lidar:
     turn_margin: 0.03           # m de margen alrededor de la huella al simular el giro
     turn_horizon: 0.5           # s de giro simulados (a 0.5 rad/s, ~14°)
     stop_distance: 0.15         # m desde el borde de la huella (con huella) o desde el LiDAR (sin ella)
-    hysteresis: 0.05            # m extra para soltar el freno (frena a 0.15, suelta a 0.20)
+    hysteresis: 0.05            # m extra para soltar el freno (frena a 0.15, suelta a 0.20); también el margen del giro
     half_angle_deg: 40.0        # semiancho del cono (sin huella) y del sector que detecta el LiDAR tapado
     laser_yaw_deg: -90.0        # yaw de base_laser respecto a base_link (el cero del LiDAR apunta a la izquierda)
     min_range: 0.06             # m; lecturas más cortas se ignoran (ruido, reflejos del chasis)

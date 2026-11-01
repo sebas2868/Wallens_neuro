@@ -289,3 +289,16 @@ def test_huella_sin_scan_bloquea_el_giro():
 def test_huella_curva_frena_avance_y_deja_giro_libre():
     v, w, bloqueado, _ = ciclo_con(con_huella(), 0.05, 0.3, [(0.148 + 0.05, 0.0)])
     assert bloqueado and v == 0.0 and w == 0.3        # obstáculo delante (no en el barrido): puede girar para salir
+
+
+def test_huella_giro_con_histeresis():
+    # un objeto en el límite del barrido no hace frenar y soltar a cada scan: frenado, suelta solo con 5 cm de margen extra
+    f = con_huella()
+    assert ciclo_con(f, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]          # a 5.5 cm del gripper: frena
+    assert ciclo_con(f, 0.0, 0.3, [(-0.25, -0.10)], t=10.1)[2]          # a 7.5 cm: sigue frenado (solo, no frenaría)
+    assert not ciclo_con(con_huella(), 0.0, 0.3, [(-0.25, -0.10)])[2]
+    assert not ciclo_con(f, 0.0, -0.3, [(-0.25, -0.10)], t=10.2)[2]     # girar al otro lado lo aleja: se permite
+    assert not ciclo_con(f, 0.0, 0.3, [(-0.25, -0.10)], t=10.3)[2]      # y la histéresis ya no aplica
+    f2 = con_huella()
+    assert ciclo_con(f2, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]
+    assert not ciclo_con(f2, 0.0, 0.3, [(0.5, 0.5)], t=10.1)[2]          # el objeto se fue: suelta
