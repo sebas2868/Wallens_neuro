@@ -27,6 +27,10 @@ cambia. Se busca por MAC de la Pi (`d8:3a:dd:46:9f:2b`):
 ssh wallens@$(scripts/pi-ip.sh)
 ```
 
+ROS 2 desde el PC (Docker, Jazzy como la Pi, con RViz y teleop): `scripts/pc-ros.sh` abre una shell;
+`scripts/pc-ros.sh ros2 topic list` o `scripts/pc-ros.sh rviz2` corren un comando. Usa el dominio ROS 37, que debe ser el mismo de la Pi
+(otro: `ROS_DOMAIN_ID=N scripts/pc-ros.sh`); si no aparecen los tópicos, `ROS_STATIC_PEERS=<ip de la Pi>`.
+
 ## Instalar (en orden)
 
 1. Flashear la SD con Raspberry Pi Imager: *Ubuntu Server 24.04 LTS (64-bit)*;
