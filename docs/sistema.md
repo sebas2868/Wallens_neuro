@@ -8,11 +8,12 @@
 /bno055/imu  (wallens_imu) ---------------------------------> EKF -> /odometry/filtered + TF odom -> base_link
 /scan (LD19) -> freno_lidar (y SLAM/Nav2 más adelante)
 INA226 -> wallens_power -> /battery_state, /battery_critical -> wallens_driver (frena)
+/parada (Bool) -----------------------------------------> wallens_driver (velocidad 0, manda sobre /cmd_vel_safe)
 ```
 
 | Paquete / archivo | Qué hace |
 |---|---|
-| `ros/wallens_driver` (C++) | Ruedas IDs 2 y 4 en modo velocidad, watchdog del bus de 200 ms, `/odom`. `publish_tf: false`: la TF la da el EKF |
+| `ros/wallens_driver` (C++) | Ruedas IDs 2 y 4 en modo velocidad, watchdog del bus de 200 ms, `/odom`. `publish_tf: false`: la TF la da el EKF. Frena si `/cmd_vel_safe` tiene más de 0.25 s, si es no finito, si `/battery_state` tiene más de 2 s (`battery_timeout`; `<= 0` lo desactiva en el banco sin INA226), con `battery_critical` o con `/parada` |
 | `ros/wallens_power` (C++) | INA226 a 2 Hz, aviso a 3.6 V/celda, corte a 3.4 V/celda (5 muestras seguidas) |
 | `ros/wallens_imu` (C++) | BNO055, ver [imu.md](imu.md) |
 | `ros/wallens_safety` (Python) | `freno_lidar`: anula el avance a menos de 30 cm en ±40° al frente (o atrás al retroceder); suelta a 35 cm; el giro en el sitio no se frena; sin `/scan` en 0.3 s, o con menos de 10 lecturas válidas en el sector (LiDAR tapado), bloquea el avance (`require_scan`); descarta `/cmd_vel` no finito; republica solo 0.25 s tras el último `/cmd_vel`. Publica `/freno_obstaculo` |
@@ -21,6 +22,26 @@ INA226 -> wallens_power -> /battery_state, /battery_critical -> wallens_driver (
 
 El driver escucha `cmd_vel_safe` (remapeo en `robot.launch.py`): todo lo que publica `/cmd_vel` pasa por el freno, incluidos
 los scripts de `scripts/odometria/`. Para saltarlo hay que publicar a `/cmd_vel_safe` a propósito.
+
+## Parada por software (`/parada`)
+
+La parada de emergencia física se descartó (no es viable en el chasis; riesgo aceptado). La mitigación por software es el
+tópico `/parada` (`std_msgs/Bool`, `transient_local`): el driver lo obedece por encima de `/cmd_vel_safe`. Con `true` las
+ruedas quedan a velocidad 0 y no se mueven hasta recibir `false`; el valor queda guardado, así que si el driver se reinicia
+con la parada puesta arranca parado. `/battery_critical` y el resto de frenos siguen aplicando.
+
+```bash
+# parar
+ros2 topic pub --once --qos-durability transient_local /parada std_msgs/msg/Bool "{data: true}"
+# reanudar
+ros2 topic pub --once --qos-durability transient_local /parada std_msgs/msg/Bool "{data: false}"
+```
+
+El driver acepta también publicadores sin `--qos-durability` (volátiles), pero solo `transient_local` queda guardado para un
+driver que arranque después. **No sustituye a la seta**: si falla el propio software, la red o el PC desde el que se
+publica, no llega. Las capas que quedan son el watchdog del bus (200 ms, si el proceso muere) y, en las pruebas en el suelo,
+a ≤ 0.10 m/s con una persona junto al interruptor o conector de la batería. Aún no hay un nodo del brazo; cuando exista
+(IDs 3 y 5) debe obedecer `/parada` igual.
 
 ## Marcos (TF)
 
@@ -64,5 +85,5 @@ de la Pi 4 casi nada. Medir antes y después de sumarlos y subir la prioridad de
 
 ## Pendiente
 
-Parada de emergencia física, cero del gripper al arrancar (bajar el tornillo al tope inferior), SLAM/Nav2, envío de imagen,
+Cero del gripper al arrancar (bajar el tornillo al tope inferior), SLAM/Nav2, envío de imagen,
 auditoría de seguridad/eficiencia/confiabilidad (prompt en la conversación; el informe iría en `docs/auditoria-*.md`).

@@ -1,6 +1,7 @@
 // Driver de las ruedas de Wallens: dueño único del bus Dynamixel (XM430-W210, protocolo 2.0).
 // Escucha /cmd_vel, mueve las ruedas en modo velocidad y publica /odom y el TF odom -> base_link.
-// Si pierde /cmd_vel o la comunicación frena, y al salir apaga el torque (verificándolo).
+// Si pierde /cmd_vel o la comunicación frena, y al salir apaga el torque (verificándolo). Frena también con
+// /parada, sin /battery_state reciente y con comandos no finitos.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -106,6 +107,19 @@ class WallensDriver : public rclcpp::Node {
           }
           bateria_critica_ = m->data;
         });
+    // /parada manda sobre /cmd_vel_safe: con true las ruedas quedan a velocidad 0 hasta recibir false. Va por dos
+    // suscripciones para no depender del QoS del que publica: la transient_local recibe el último valor aunque el
+    // driver arranque después (o se reinicie), y la volátil acepta publicadores que no son transient_local
+    // (p. ej. `ros2 topic pub` sin --qos-durability, que con una sola suscripción transient_local no conectaría).
+    auto al_recibir_parada = [this](std_msgs::msg::Bool::ConstSharedPtr m) {
+      if (m->data != parada_) {
+        RCLCPP_WARN(get_logger(), m->data ? "PARADA recibida: ruedas a velocidad 0 hasta recibir /parada false"
+                                          : "Parada levantada: las ruedas obedecen a /cmd_vel_safe");
+      }
+      parada_ = m->data;
+    };
+    sub_parada_ = create_subscription<std_msgs::msg::Bool>("parada", rclcpp::QoS(1).transient_local(), al_recibir_parada);
+    sub_parada_volatil_ = create_subscription<std_msgs::msg::Bool>("parada", rclcpp::QoS(10).reliable(), al_recibir_parada);
     // Sin lecturas recientes de wallens_power (muerto, INA226 ausente) no se sabe si la batería aguanta: se frena
     sub_estado_bateria_ = create_subscription<sensor_msgs::msg::BatteryState>(
         "battery_state", 10, [this](sensor_msgs::msg::BatteryState::ConstSharedPtr) {
@@ -211,7 +225,7 @@ class WallensDriver : public rclcpp::Node {
       }
       bateria_ok_previa_ = bateria_ok;
     }
-    if (bateria_ok && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
+    if (!parada_ && bateria_ok && hay_cmd_ && std::chrono::duration<double>(ahora - ultimo_cmd_).count() <= cmd_timeout_) {
       v = std::clamp(cmd_v_, -max_lineal_, max_lineal_);
       w = std::clamp(cmd_w_, -max_angular_, max_angular_);
     }
@@ -375,6 +389,7 @@ class WallensDriver : public rclcpp::Node {
   double cmd_v_ = 0.0, cmd_w_ = 0.0;
   bool hay_cmd_ = false;
   bool bateria_critica_ = false;
+  bool parada_ = false;
   bool hay_bateria_ = false;
   bool bateria_ok_previa_ = true;
   double bateria_timeout_ = 2.0;
@@ -388,6 +403,7 @@ class WallensDriver : public rclcpp::Node {
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_bateria_;
   rclcpp::Subscription<sensor_msgs::msg::BatteryState>::SharedPtr sub_estado_bateria_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_parada_, sub_parada_volatil_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_;
   rclcpp::TimerBase::SharedPtr timer_;
