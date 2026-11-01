@@ -11,6 +11,7 @@ COMPLETA = "exploration_complete"     # explore_lite_msgs/ExploreStatus
 class Supervisor:
     """Los tiempos (`t`) son segundos de un reloj monótono que pasa el que llama."""
 
+    # sin_progreso <= 0 desactiva la comprobación de progreso (mapeo sin explorar: el robot espera destinos quieto)
     def __init__(self, max_duracion=1200.0, bateria_min=14.6, ventana_bateria=10.0, sin_progreso=120.0,
                  progreso_min=0.20, bloqueo_max=20.0, dato_timeout=3.0, arranque=30.0):
         self.max_duracion, self.bateria_min, self.ventana_bateria = max_duracion, bateria_min, ventana_bateria
@@ -69,7 +70,7 @@ class Supervisor:
                 return ("fallo", "sin /battery_state reciente")
             if t - self.t_pose > self.dato_timeout:
                 return ("fallo", "sin /odometry/filtered reciente")
-            if self.ancla is not None and t - self.ancla[2] > self.sin_progreso:
+            if self.sin_progreso > 0 and self.ancla is not None and t - self.ancla[2] > self.sin_progreso:
                 return ("fallo", f"sin avanzar {self.progreso_min:.2f} m en {self.sin_progreso:.0f} s")
         if self.t_freno is not None and t - self.t_freno > self.bloqueo_max:
             return ("fallo", f"frenado por obstáculo más de {self.bloqueo_max:.0f} s seguidos")

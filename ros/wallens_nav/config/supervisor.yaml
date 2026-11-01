@@ -2,7 +2,7 @@ supervisor_mision:
   ros__parameters:
     max_duration: 1200.0          # s: tope de la misión (20 min)
     battery_min_voltage: 14.6     # V de media en 10 s (3.65 V/celda): se termina y se guarda el mapa antes del aviso de 14.4
-    no_progress_timeout: 120.0    # s sin avanzar progress_distance: fallo (se publica /parada)
+    no_progress_timeout: 120.0    # s sin avanzar progress_distance: fallo (se publica /parada); el launch lo pone a 0 sin explorar
     progress_distance: 0.20       # m
     blocked_timeout: 20.0         # s seguidos con freno_obstaculo: fallo
     data_timeout: 3.0             # s sin /battery_state u /odometry/filtered: fallo

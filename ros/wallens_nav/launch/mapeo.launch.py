@@ -13,7 +13,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, Shutdown
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
 
@@ -59,5 +59,9 @@ def generate_launch_description():
 
         # Si el supervisor sale (misión terminada o abortada) se cierra todo el mapeo
         Node(package='wallens_nav', executable='supervisor_mision.py', name='supervisor_mision', output='screen',
-             prefix=prefijo, parameters=[cfg('supervisor.yaml')], on_exit=Shutdown()),
+             prefix=prefijo, on_exit=Shutdown(),
+             parameters=[cfg('supervisor.yaml'),
+                         # sin explorar el robot espera destinos quieto: no se exige progreso
+                         {'no_progress_timeout': ParameterValue(PythonExpression(
+                             ["120.0 if '", LaunchConfiguration('explorar'), "' == 'true' else 0.0"]), value_type=float)}]),
     ])

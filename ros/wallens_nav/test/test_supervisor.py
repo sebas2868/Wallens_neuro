@@ -80,3 +80,7 @@ def test_recorrido_acumula_distancia():
     s = Supervisor()
     alimentar(s, 0.0, 20.0)
     assert abs(s.recorrido - 1.0) < 1e-9
+
+
+def test_sin_progreso_desactivado_no_aborta_quieto():
+    assert alimentar(Supervisor(sin_progreso=0.0), 0.0, 600.0, mover=False)[1] is None
