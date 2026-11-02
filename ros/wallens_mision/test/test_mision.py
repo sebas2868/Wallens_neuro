@@ -390,6 +390,16 @@ class FallosReales(unittest.TestCase):
             self.assertEqual(w.choques, [])
             self.assertAlmostEqual(m.agarre_visto[0], -0.21, delta=0.01)   # dónde ve la fruta ya agarrada
 
+    def test_no_cierra_con_la_fruta_en_las_puntas_de_los_dedos(self):
+        # 2.ª prueba: el limón ya estaba 1 cm más afuera que x_agarre, dentro de la tolerancia: cerró sin moverse, los
+        # dedos lo expulsaron (sin_agarre) y rodó. Tiene que retroceder hasta el punto de agarre, no al borde lejano
+        for semilla in range(5):
+            w = Mundo([("limon", -0.24, 0.0)], semilla=semilla)
+            m = Mision(pedido(**self.DETRAS), desde="ABRIR", hasta="VERIFICAR")
+            s = correr(w, m)
+            self.assertEqual(s.fin, ("fin", "hasta VERIFICAR"), (semilla, m.historial[-6:]))
+            self.assertNotIn("REINTENTO", estados(m), semilla)
+
     def test_un_brazo_congelado_sin_fruta_se_rearma_al_lanzar_otra_mision(self):
         # fallo 2: un fallo anterior dejó el brazo congelado y la misión siguiente no arrancaba
         w = Mundo([("limon", -0.33, 0.0)])

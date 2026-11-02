@@ -79,6 +79,21 @@ Cambios frente a la primera versión: sin estados del ascensor (el tornillo est�
 entran como órdenes dentro de `ABRIR` y `VERIFICAR`), `RODEAR` va dentro de `ACERCAR` y `ORIENTAR` dentro de `DEJAR`,
 `ALINEAR` pasa a ser `RETROCEDER` y el reintento ya no es "avanzar 5 cm y repetir" sino volver a buscar con `cam_frutas`.
 
+### Segunda prueba (2026-11-02, etapa `agarre`)
+
+Registro: `registros/mision-20261102-112602-agarre`. La búsqueda tras el reintento funcionó (el limón rodó, cam_frutas
+lo encontró a 0.48 m, se acercó y giró), pero:
+
+1. **`sin_agarre` con la fruta "en la zona".** El limón estaba a x = -0.199 y `x_agarre` = -0.189: 1 cm afuera, dentro de
+   la tolerancia de ±1.5 cm, así que cerró sin moverse. Contacto en 3840, la pinza llegó al tope y cam_garra vio el limón
+   salir de -0.199 a -0.214: los dedos lo expulsaron. Como la fruta siempre llega desde afuera, RETROCEDER paraba en el
+   borde lejano de la tolerancia. Ahora tiene que pasar `adentro_agarre` = 3 mm hacia adentro de `x_agarre` (hasta
+   `tol_agarre_x` = 1.5 cm). El mundo falso expulsa la fruta si cierra más de 5 mm afuera
+   (`test_no_cierra_con_la_fruta_en_las_puntas_de_los_dedos`); en 60 misiones con ruido alto: 0 fallos, 3 reintentos.
+2. **"abrir rechazada: el brazo está ocupado" con el brazo quieto.** La orden llegó mientras `mantener()` leía el motor
+   (toma el mismo cerrojo). Ahora una orden espera esa lectura (hasta 1 s) y solo se rechaza si hay otra orden en curso
+   (`test_una_orden_durante_la_vigilancia_espera_y_no_se_rechaza`).
+
 ### Fallos de la primera prueba (2026-11-02) y qué se cambió
 
 `desde=ABRIR hasta=VERIFICAR` con el limón detrás del robot. Reproducidos en el mundo falso antes de arreglarlos

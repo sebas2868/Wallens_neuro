@@ -61,7 +61,9 @@ class ControlBrazo:
 
     # --- órdenes ----------------------------------------------------------------------------------------
     def _ejecutar(self, nombre, f, *, necesita_calibrado=False, permite_congelado=False, necesita_ruedas=True):
-        if not self._cerrojo.acquire(blocking=False):
+        # con otra orden en curso se rechaza; si solo es mantener() leyendo (brazo quieto) se espera a que suelte, que es
+        # una lectura: antes también se rechazaba como "ocupado" y la misión acababa en FALLO (2026-11-02)
+        if not (self._cerrojo.acquire(blocking=False) or (not self._en_orden and self._cerrojo.acquire(timeout=1.0))):
             return Resultado(False, f"{nombre} rechazada: el brazo está ocupado")
         self._en_orden = True
         try:

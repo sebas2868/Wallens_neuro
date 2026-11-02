@@ -14,7 +14,7 @@ if [ "${1:-}" != "--sin-tests" ]; then
 fi
 
 echo "== rsync a $PI:wallens"
-cambios=$(rsync -rlpc --itemize-changes --exclude .git --exclude __pycache__ --exclude .venv --exclude '*.pyc' \
+cambios=$(rsync -rlpc --itemize-changes --exclude .git --exclude __pycache__ --exclude .venv --exclude '*.pyc' --exclude .pytest_cache --exclude registros \
   "$AQUI/" "$PI:wallens/" | awk '$1 ~ /^[<>c]f/ {print $2}')
 if [ -z "$cambios" ]; then
   echo "sin cambios"

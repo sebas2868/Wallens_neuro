@@ -1,6 +1,7 @@
 """Pruebas de ControlBrazo (órdenes del nodo ROS) contra el bus falso.
 Uso (desde scripts/):  python3 -m unittest brazo.test_control -v"""
 import os
+import threading
 import unittest
 
 from brazo import Brazo, Cero, Config, ControlBrazo, PINZA, TORNILLO
@@ -81,6 +82,7 @@ class TestRecoger(BaseControl):
     def test_una_orden_a_la_vez(self):
         c = self.listo()
         with c._cerrojo:                                  # simula otra orden en curso
+            c._en_orden = True
             r = c.recoger()
         self.assertFalse(r.ok)
         self.assertIn("ocupado", r.mensaje)
@@ -265,6 +267,16 @@ class TestReposo(BaseControl):
         self.assertTrue(c.orden("abrir").ok)
         with c._cerrojo:                                  # mantener() a mitad de su lectura
             self.assertFalse(c.ocupado)
+
+    def test_una_orden_durante_la_vigilancia_espera_y_no_se_rechaza(self):
+        # fallo real (2026-11-02): "abrir" llegó mientras mantener() leía el motor y se rechazó como "ocupado" con el
+        # brazo quieto; la misión acabó en FALLO tras encontrar otra vez la fruta
+        c = self.control_pinza()
+        self.assertTrue(c.orden("abrir").ok)
+        c._cerrojo.acquire()                              # mantener() a mitad de su lectura
+        threading.Timer(0.05, c._cerrojo.release).start()
+        r = c.orden("abrir")
+        self.assertTrue(r.ok, r.mensaje)
 
     def test_parada_con_el_brazo_en_reposo_no_lo_congela(self):
         c = self.control_pinza()

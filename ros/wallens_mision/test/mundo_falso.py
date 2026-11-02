@@ -131,7 +131,9 @@ class Mundo:
                 return True, "sin_agarre"
             for f in self.frutas:
                 bx, by = a_base(self.pose, (f.x, f.y))
-                if abs(bx - self.x_agarre) <= 0.025 and abs(by) <= 0.02:
+                # fallo real (2026-11-02): más de 5 mm afuera la fruta queda en las puntas de los dedos y al apretar
+                # la expulsan (la pinza llega al tope); más adentro agarra hasta 2.5 cm
+                if -0.005 <= bx - self.x_agarre <= 0.025 and abs(by) <= 0.02:
                     f.agarrada = True
                     return True, "agarrado"
             return True, "sin_agarre"

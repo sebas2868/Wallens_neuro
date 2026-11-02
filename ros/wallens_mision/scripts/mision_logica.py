@@ -58,7 +58,10 @@ class Config:
     # de cam_garra, que puede no coincidir con la huella (docs/mision-frutas-plan.md, «Geometría del agarre»)
     x_agarre: float = -0.23
     y_agarre: float = 0.0
-    tol_agarre_x: float = 0.015
+    tol_agarre_x: float = 0.015      # m que la fruta puede quedar más adentro (hacia las ruedas) que x_agarre
+    # y lo mínimo que tiene que pasar de x_agarre hacia adentro: no basta llegar al borde lejano de una tolerancia, ahí
+    # queda en las puntas de los dedos y al apretar la expulsan (2.ª prueba, 2026-11-02); 3 mm cubren el ruido de cam_garra
+    adentro_agarre: float = 0.003
     tol_agarre_y: float = 0.012
     d_previo: float = 0.50           # m de la línea de entrega al punto previo (llega perpendicular)
     alejar: float = 0.30             # m que avanza tras soltar, antes de cerrar la pinza
@@ -796,13 +799,14 @@ class Mision:
             self.t_parado = None
         fy -= c.y_agarre
         falta = fx - c.x_agarre                    # < 0: la fruta está más atrás que la zona de agarre
-        if abs(falta) <= c.tol_agarre_x and abs(fy) <= c.tol_agarre_y:
+        en_x = c.adentro_agarre <= falta <= c.tol_agarre_x
+        if en_x and abs(fy) <= c.tol_agarre_y:
             if self.confirmadas >= c.confirmaciones:
                 self._terminar(t)
                 return Salida(self.estado)
             return Salida(self.estado, aviso="en la zona de agarre: esperando cuadros de cam_garra")
         v = 0.0
-        if abs(falta) > c.tol_agarre_x:
+        if not en_x:
             v = math.copysign(limitar(c.k_retro * abs(falta), c.v_retro_min, c.v_retro), falta)
             if abs(fy) > 2 * c.tol_agarre_y:
                 v /= 2                             # muy desviada: corrige el rumbo antes de llegar
