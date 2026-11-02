@@ -1,0 +1,103 @@
+# Plan de pruebas del brazo (tornillo + gripper)
+
+Acordado el 2026-11-01. Tornillo sin fin = ID 3 (sube y baja), gripper = ID 5. Detalle del tornillo en [tornillo.md](tornillo.md).
+
+## Por qué este plan
+
+Las primeras pruebas combinadas fallaron cuatro veces seguidas por código que nunca se había ejecutado: la aceleración
+del perfil escrita antes que la velocidad (error 4), un despegue del tope que se olvidó, un parámetro que tapaba una
+función y un homing a 23 rpm que encajó el tornillo en el tope. Ninguna rompió nada, pero fue suerte. Desde ahora el
+código se prueba primero contra un bus falso y las pruebas con motores van por etapas.
+
+## Código
+
+- `scripts/brazo/`: módulo sin ROS. `Brazo(bus, cal)` con órdenes simples: `preparar`, `energizar`, `calibrar`, `bajar`,
+  `subir`, `abrir`, `cerrar_y_apretar`, `recoger`, `soltar`, `congelar`, `apagar`.
+- El módulo no abre el puerto: recibe un `bus` con `ping`, `leer` y `escribir`. Hoy es `SdkBus` (el SDK); en los tests,
+  `BusFalso`. El nodo ROS del brazo solo llamará a estas órdenes (una acción `Recoger`, un servicio `Soltar`).
+- `scripts/brazo/falso.py`: bus falso con los fallos reales (aceleración mayor que velocidad, EEPROM con torque, watchdog,
+  tornillo que se encaja si llega rápido al tope, objeto elástico que puede resbalar). Reloj falso: los tests no esperan.
+- Tests: `cd scripts && python3 -m unittest brazo.test_brazo -v` (34 pruebas; se comprobó que reintroducir el bug del
+  orden 108/112 y el del despegue las hace fallar).
+- `scripts/prueba-brazo.py --etapa=N`: las pruebas con motores. Reemplaza a `test-recoger.py`.
+
+**Regla: no se toca el robot si los tests no pasan.**
+
+## Gripper abierto: congelar la meta (estrategia B)
+
+El gripper tiene juego en los engranajes. Si tras abrir la meta queda en la apertura, el controlador de posición sigue
+corrigiendo ese juego y la pinza oscila. **Estrategia acordada:** al terminar de abrir, escribir como meta la posición
+actual (`meta = posición real`), con el torque encendido. Así el error es cero y el controlador no empuja. Para cerrar
+se escribe una meta nueva (`cerrar_y_apretar()` ya lo hace). Está en `Brazo.abrir()`.
+
+- La pinza queda donde llegó, a lo sumo a 4 ticks de la apertura nominal (la tolerancia de llegada).
+- Siguen valiendo la corriente y la velocidad configuradas; solo cambia la meta.
+- No es un bloqueo mecánico: si algo empuja los dedos, el controlador los devuelve a esa meta.
+- **Pendiente de verificar en el robot:** `scripts/diagnostico-pinza.py` compara la estrategia A (como antes), B, C (B con
+  corriente baja de mantenimiento) y D (torque apagado) midiendo el pico a pico, las inversiones de sentido y la corriente.
+  Si B no basta, la C es el siguiente paso.
+
+## Política de abortos
+
+| Anomalía | Tipo | Qué pasa |
+|---|---|---|
+| Atasco, corriente alta, resbalón, tiempo agotado, no despega del tope | Suave | `congelar()`: las metas pasan a la posición actual y el torque sigue. Espera tu Enter; entonces abre la pinza y apaga |
+| Error de hardware, sobretemperatura (>55 °C), voltaje fuera de 10–14.8 V, fallo de comunicación, Ctrl+C | Duro | Torque off de ambos motores (cada uno por separado), se invalida el cero. Suelta el objeto |
+
+El tornillo se sostiene solo con el torque apagado (comprobado a mano el 2026-11-01), así que apagarlo no lo deja caer.
+El gripper sí suelta el objeto al apagarse.
+
+## Calibración
+
+- Se golpea el tope inferior una sola vez por energización, a ~20 rpm (`vel_busqueda = 87`), con el torque limitado a
+  corriente 120 (~320 mA). A 23 rpm (100) el tornillo se encajó y no se despegaba con corriente 150; 87 está cerca de ese
+  límite, así que es lo primero que se baja si vuelve a encajarse (`--busqueda=60`, 40 era el valor lento validado).
+- Tras el tope se despega 40 ticks, a la misma velocidad y con corriente 250 (~670 mA). Si no se despega, aborto suave y queda sin calibrar.
+- El cero se guarda en `~/.cache/wallens/brazo-cero.json` y vale solo mientras la marca de la RAM del motor (Indirect
+  Address 28, dirección 222, valor 0xCA11) siga puesta. Si hubo corte de los 12 V, la marca vuelve a 0 y se hace homing.
+- Sin calibrar, `bajar`, `subir` y `recoger` se rechazan.
+- **Por verificar en el banco (etapa 0):** que escribir 0xCA11 en esa dirección sea aceptado, que no afecte a nada, y que
+  vuelva a 0 al quitar los 12 V. Si el motor la rechaza, el código sigue funcionando pero hace homing en cada arranque.
+
+## Etapas con motores
+
+Cada etapa solo empieza si la anterior pasó. Una persona con la mano en el interruptor o en el conector de la batería
+durante todo movimiento. Etapas 1 a 3 con fuente de banco limitada a ~2 A si se tiene; si no, batería con la persona al lado.
+Antes de cada una: `sudo systemctl stop wallens` y `source /opt/ros/jazzy/setup.bash`.
+
+| Etapa | Comando | Pasa si |
+|---|---|---|
+| 0 | a mano, ver arriba | la marca se escribe, se lee y vuelve a 0 sin los 12 V |
+| 1 tornillo solo | `python3 scripts/prueba-brazo.py --etapa=1` | homing en menos de 70 s (~35 s esperados a 20 rpm), despegue sin abortar, 3 ciclos subir/bajar con error de llegada < 8 ticks y corriente máx < 250, sin abortos |
+| 2 gripper solo | `--etapa=2` | 2 ciclos abrir/cerrar en vacío, el cierre dice "sin contacto". (Antes se puede repetir `test-gripper.py` y `--agarrar`, ya validados) |
+| 3 combinado en vacío | `--etapa=3` | `recoger()` devuelve `sin_agarre`, nunca `agarrado` |
+| 4 objeto blando (<100 g) | `--etapa=4 --corridas=5` | 5 de 5 corridas `agarrado`, sin resbalar |
+| 5 objeto real | `--etapa=5 --corridas=5` | igual que la 4 |
+
+Si una etapa falla: se para, se anota el mensaje, se reproduce en el bus falso (añadiendo el caso a los tests) y se corrige
+antes de volver a mover los motores.
+
+## Pendiente antes de la etapa 4
+
+- Medir la holgura entre el gripper y la mesa con el tornillo en el tope inferior y anotarla en `tornillo.md`.
+- Elegir el objeto blando (pelota de espuma o fruta de juguete, menos de 100 g).
+
+## Punto abierto: integración con ROS
+
+El bus de los motores es un solo puerto (`/dev/dynamixel`) y el driver C++ de las ruedas lo tiene abierto. Un nodo del
+brazo en otro proceso no puede abrirlo a la vez. Opciones: (a) el brazo dentro del driver C++, (b) el driver presta el bus
+por un servicio o tópico y el nodo Python usa un `Bus` que habla con él, (c) un segundo adaptador USB. No se decide ahora.
+
+## Incidente 2026-11-01: se rompió el tornillo
+
+En la primera corrida de la etapa 1 (homing a ~20 rpm, `vel_busqueda = 87`, torque limitado a corriente 120) el motor
+giró 45836 ticks sin frenarse y el script abortó con "sin tope inferior". Después se comprobó que el tornillo sin fin se
+había roto. Antes habían ocurrido un encaje a 23 rpm contra el tope y un despegue con corriente 250. La causa exacta no
+está confirmada; los golpes contra el tope duro son el sospechoso principal.
+
+Consecuencias para el plan:
+- No repetir la etapa 1 ni ninguna con motores hasta cambiar el tornillo y revisar el acople y la tuerca.
+- Replantear el cero: golpear un tope duro en cada energización es lo que más exige al mecanismo. Alternativas a decidir:
+  un final de carrera o sensor en el carro, un tope blando o una marca mecánica, o limitar el homing a velocidad muy baja
+  y corriente mínima validada a mano.
+- Registrar posición y corriente durante el homing para ver lo que pasa en el tope.
