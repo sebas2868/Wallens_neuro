@@ -7,8 +7,8 @@
 #   hasta-agarrar  como acercar y luego lo agarra (hasta VERIFICAR)
 #   completa       lo agarra, lo deja donde arrancó el robot y se aparta (por defecto)
 # Cada vez:
-#   1. para el servicio wallens si corre (pide la contraseña de sudo) y lanza mision.launch.py si no está; el launch
-#      queda corriendo para la etapa siguiente (no se espera otra vez a que suba)
+#   1. para el servicio wallens si corre (pide la contraseña de sudo) y lanza mision.launch.py si no está (o lo relanza
+#      si le falta un nodo o el detector se recompiló); queda corriendo para la etapa siguiente
 #   2. preflight: si algo falta lo dice y no mueve nada
 #   3. la misión, con todo el registro en ~/.cache/wallens/mision-<fecha>/ (y los cuadros de las cámaras en
 #      ~/.cache/wallens/detector/)
@@ -42,20 +42,35 @@ if [[ $servicio == activ* || $servicio == reloading ]]; then   # "activating": a
   echo "Paro el servicio wallens (usa el mismo bus): sudo systemctl stop wallens"
   sudo systemctl stop wallens
 fi
-if ! pgrep -x detector_frutas >/dev/null; then
+# el launch se reconoce por su proceso (no por un nodo: con uno caído se lanzaba otro encima y los dos drivers chocaban
+# en el bus). Se relanza si le falta un nodo o si el detector se recompiló después de lanzarlo.
+launch=$(pgrep -f "ros2 launch .*mision.launch.py" | head -1 || true)
+detector=~/ros_ws/install/wallens_mision/lib/wallens_mision/detector_frutas
+if [ -n "$launch" ]; then
+  inicio=$(date -d "$(ps -o lstart= -p "$launch")" +%s)
+  if ! pgrep -x detector_frutas >/dev/null || ! pgrep -x wallens_driver >/dev/null || ! pgrep -f nodo-brazo.py >/dev/null \
+     || [ "$(stat -c %Y "$detector")" -gt "$inicio" ]; then
+    echo "relanzo mision.launch.py (PID $launch): le falta un nodo o el detector es más nuevo"
+    kill -INT "$launch"
+    for _ in $(seq 30); do kill -0 "$launch" 2>/dev/null || break; sleep 0.5; done
+    launch=""
+  fi
+fi
+if [ -z "$launch" ]; then
   setsid nohup ros2 launch ~/wallens/launch/mision.launch.py depuracion:=true > "$LOG/launch.log" 2>&1 &
-  echo "mision.launch.py lanzado (PID $!, log $LOG/launch.log); espero a que suba"
-  sleep 15
+  launch=$!
+  echo "mision.launch.py lanzado (PID $launch, log $LOG/launch.log)"
 fi
 
-for intento in 1 2 3 4; do
-  if python3 ~/wallens/scripts/preflight.py --dejar $CAMARA > "$LOG/preflight.txt" 2>&1; then
-    break
+echo "preflight (espera a que los nodos publiquen, ~20 s)..."
+if ! python3 ~/wallens/scripts/preflight.py --dejar $CAMARA --esperar 40 > "$LOG/preflight.txt" 2>&1; then
+  cat "$LOG/preflight.txt"
+  if ! kill -0 "$launch" 2>/dev/null; then
+    echo "mision.launch.py se cayó:"; grep -E "FATAL|ERROR" "$LOG/launch.log" | head -5 || true
   fi
-  [ $intento = 4 ] && { cat "$LOG/preflight.txt"; echo "Preflight sin pasar: no se mueve nada."; exit 1; }
-  echo "preflight: aún falta algo (intento $intento), reintento en 5 s"
-  sleep 5
-done
+  echo "Preflight sin pasar: no se mueve nada."
+  exit 1
+fi
 cat "$LOG/preflight.txt"
 
 echo

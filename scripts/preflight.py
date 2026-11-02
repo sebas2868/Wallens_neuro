@@ -12,6 +12,7 @@ No mueve motores: lee el error de hardware del gripper por brazo/transaccion y e
 
 Uso (con mision.launch.py corriendo):  source ~/wallens/scripts/ros-env.sh && python3 ~/wallens/scripts/preflight.py
   [--dejar frutas|garra]   esa cámara queda encendida al final (la primera que usará la misión)
+  [--esperar S]            espera hasta S s a que lleguen los tópicos (recién lanzado mision.launch.py)
 Sale con 1 si algo impide la misión."""
 import json
 import os
@@ -99,7 +100,8 @@ def revisar_sistema():
 
 
 def main():
-    dejar = sys.argv[2] if sys.argv[1:2] == ["--dejar"] and len(sys.argv) > 2 else ""
+    opcion = lambda n: sys.argv[sys.argv.index(n) + 1] if n in sys.argv[:-1] else ""  # noqa: E731
+    dejar, esperar = opcion("--dejar"), float(opcion("--esperar") or 0)
     encontrados = revisar_sistema()
     pids = {p: n for n, ps in encontrados.items() for p in ps}
     cpu0, t_cpu0 = cpu(pids), time.monotonic()
@@ -128,6 +130,11 @@ def main():
         while time.monotonic() < fin:
             rclpy.spin_once(nodo, timeout_sec=0.05)
 
+    if esperar:
+        t0 = time.monotonic()
+        while min(cuenta.values()) == 0 and time.monotonic() - t0 < esperar:
+            rclpy.spin_once(nodo, timeout_sec=0.1)
+        print(f"== los nodos publican tras {time.monotonic() - t0:.0f} s de espera")
     print("== tópicos (4 s)")
     t0 = time.monotonic()
     girar(4.0)
