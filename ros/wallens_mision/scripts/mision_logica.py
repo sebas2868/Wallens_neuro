@@ -29,6 +29,9 @@ ALCANCE = math.hypot(DEDOS_X[0], DEDOS_CERRADOS)   # lo que barre el gripper cer
 SECUENCIA = ("INICIO", "IR_A_ZONA", "BUSCAR", "ACERCAR", "GIRAR", "ABRIR", "RETROCEDER", "CERRAR", "VERIFICAR",
              "SALIR", "IR_A_ENTREGA", "DEJAR", "SOLTAR", "ALEJAR", "CERRAR_VACIO", "SIGUIENTE")
 CON_FRUTA = {"SALIR", "IR_A_ENTREGA", "DEJAR", "SOLTAR"}   # el brazo ya la lleva
+# INICIO cierra la pinza (navega con los dedos cerrados) salvo si empieza en uno de estos: con fruta, o con la pinza
+# a punto de abrirse o ya abierta alrededor de la fruta
+SIN_CERRAR_AL_EMPEZAR = CON_FRUTA | {"ABRIR", "RETROCEDER", "CERRAR", "VERIFICAR"}
 NECESITAN_FRUTA = {"ACERCAR", "GIRAR"}                     # con --desde, antes la localiza un BUSCAR
 CAMARA = dict(IR_A_ZONA="frutas", BUSCAR="frutas", ACERCAR="frutas", REINTENTO="frutas",
               GIRAR="garra", ABRIR="garra", RETROCEDER="garra", CERRAR="garra", VERIFICAR="garra")
@@ -175,6 +178,15 @@ def pedido_relativo(pedido, pose):
     return Pedido(zona=a_odom(pose, pedido.zona), radio=pedido.radio, frutas=list(pedido.frutas),
                   entrega=a_odom(pose, pedido.entrega), angulo_linea=ang(pedido.angulo_linea + pose[2]),
                   separacion=pedido.separacion, volver_home=pedido.volver_home)
+
+
+def ordenes_al_salir(brazo):
+    """Órdenes al brazo para dejar la pinza cerrada cuando se corta la misión con Ctrl+C. `brazo`: el último
+    brazo/estado ({congelado, objeto}) o None. Con fruta no se toca: ya está cerrada sobre ella y otro `cerrar`
+    la apretaría con la corriente por defecto. Sin saber cómo está, tampoco."""
+    if brazo is None or brazo["objeto"]:
+        return []
+    return ["rearmar", "cerrar"] if brazo["congelado"] else ["cerrar"]
 
 
 def puntos_entrega(pedido, n):
@@ -393,9 +405,10 @@ class Mision:
         if p.separacion < c.separacion_min:
             raise ValueError(f"separación {p.separacion} m < {c.separacion_min} m: los dedos abiertos tocarían la fruta anterior")
         e = puntos_entrega(p, len(p.frutas))
-        # los puntos previos (a d_previo de la línea) tienen que quedar fuera del círculo que protege la zona
+        # los puntos previos (a d_previo de la línea) tienen que quedar fuera del círculo que protege la zona, para no
+        # barrer las frutas que quedan en ella. Con una sola, la zona ya está vacía al ir a entregar: vale cualquier punto
         minimo = c.d_previo + p.radio + c.margen_zona + max(RADIOS.values()) + ALCANCE + c.margen_ruta
-        if distancia_a_segmento(p.zona, e[0], e[-1]) < minimo:
+        if len(p.frutas) > 1 and distancia_a_segmento(p.zona, e[0], e[-1]) < minimo:
             raise ValueError(f"la zona está a menos de {minimo:.2f} m de la línea de entrega")
         for nombre, e in (("desde", desde), ("hasta", hasta)):
             if e is not None and (e not in SECUENCIA or e in ("INICIO", "SIGUIENTE")):
@@ -620,6 +633,16 @@ class Mision:
         con_fruta = self.desde in CON_FRUTA
         if b["objeto"] != con_fruta:
             raise Fallo("el brazo " + ("no lleva" if con_fruta else "ya lleva") + " una fruta")
+        if self.desde not in SIN_CERRAR_AL_EMPEZAR:
+            # la pinza está como la dejó la prueba anterior, o abierta por el rearme: con los dedos abiertos (±136 mm)
+            # barre frutas y el freno LiDAR usa la huella cerrada
+            if self.resultado and self.resultado[0] == "rearmar":
+                self.orden_emitida, self.resultado = False, None   # el rearme terminó: ahora la orden de cerrar
+            s, texto = self._ordenar(t, "cerrar")
+            if texto is None:
+                return s
+            if texto == "agarrado":
+                raise Fallo("la pinza agarró algo al cerrarla para empezar: quitarlo de entre los dedos")
         self._terminar(t)
         return Salida(self.estado)
 
@@ -633,7 +656,11 @@ class Mision:
                 return pose[:2]
             k = c.d_vista / d
             return (z[0] + k * (pose[0] - z[0]), z[1] + k * (pose[1] - z[1]))
-        self._ir_a(punto_vista(self.pose), self.entregadas)
+        if math.dist(self.pose[:2], z) < c.d_vista:
+            # ya más cerca (zona a menos de 1 m): marcha atrás alejándose del centro, sin dar la vuelta dos veces
+            self.maniobras.append(Recta(punto_vista(self.pose), atras=True))
+        else:
+            self._ir_a(punto_vista(self.pose), self.entregadas)
         self.maniobras.append(Giro(lambda pose: math.atan2(z[1] - pose[1], z[0] - pose[0])))
 
     _e_ir_a_zona = _mover
@@ -643,12 +670,18 @@ class Mision:
         self.base = math.atan2(self.centro[1] - self.pose[1], self.centro[0] - self.pose[0])
         self.vistos = set()
         self.mapa = []                             # [tipo, x, y, n]: todas las frutas vistas en la zona
+        self.fuera = None                          # (distancia al centro, punto): la pedida más cercana fuera de la zona
 
     def _cuadro_busqueda(self, en_odom, t):
         c = self.cfg
         if self.t_quieto is None or t < self.t_quieto + c.espera_mirar:
             return
-        en_zona = [(tipo, p) for tipo, p in en_odom if math.dist(p, self.centro) <= self.radio_busqueda + c.margen_zona]
+        limite = self.radio_busqueda + c.margen_zona
+        en_zona = [(tipo, p) for tipo, p in en_odom if math.dist(p, self.centro) <= limite]
+        for tipo, p in en_odom:
+            d = math.dist(p, self.centro)
+            if tipo == self.pedida() and d > limite and (self.fuera is None or d < self.fuera[0]):
+                self.fuera = (d, p)
         self.vistos.update(tipo for tipo, _ in en_zona)
         for tipo, p in en_zona:
             f = next((f for f in self.mapa if f[0] == tipo and math.dist(p, f[1:3]) <= c.agrupar), None)
@@ -688,7 +721,12 @@ class Mision:
             self.direccion += 1
             if self.direccion >= len(c.barrido):
                 vistos = ", ".join(sorted(self.vistos)) or "ninguna fruta"
-                raise Fallo(f"no encontró {self.pedida()} en la zona (vio: {vistos})")
+                fuera = ""
+                if self.fuera:
+                    d, p = self.fuera
+                    fuera = (f"; vio {self.pedida()} fuera de la zona, a {d:.2f} m de su centro "
+                             f"(odom x={p[0]:.2f} y={p[1]:.2f}): ¿la zona pedida es la buena?")
+                raise Fallo(f"no encontró {self.pedida()} en la zona (vio: {vistos}){fuera}")
             self.maniobras.append(Giro(self.base + math.radians(c.barrido[self.direccion])))
             self.t_quieto, self.candidato, self.acumulado = None, None, []
             r = self._maniobrar(t)

@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from brazo import APRIETE_FRUTA, AbortoDuro, AbortoSuave, Brazo, BusRos, Cero, Config, ErrorBus, PINZA, TORNILLO
 from brazo.falso import BusFalso
+from brazo.brazo import CIERRE_MEDIDO
 
 CAL = {"abajo": 24245, "arriba": -13399, "abajo_util": 24245, "arriba_util": -11517, "sentido_abajo": 1}
 OBJETO = {"contacto": 3300, "rigidez": 15}      # ~43 ticks de compresión a la corriente de agarre
@@ -215,6 +216,22 @@ class TestGripper(Base):
         self.assertIsNotNone(b.cerrar_fruta("limon"))
         self.assertLess(max(vistas), APRIETE_FRUTA["naranja"])    # no aprieta el limón como a la naranja
         self.assertEqual(b.cfg.corriente_apriete, Config().corriente_apriete)   # deja la config como estaba
+
+    def test_limon_blando_al_tope_con_la_corriente_de_sosten_es_agarre(self):
+        # prueba real 2026-11-02 12:20: contacto en 3837, la pinza llegó al tope (3875) con 230 y 216 < 250 de apriete y
+        # devolvió "no agarra" dos veces con el limón bien cogido; sostenerlo firme pide 200 (SOSTEN_FRUTA)
+        b = self.listo(calibrado=False)
+        b.abrir()
+        b.usar_cierre(CIERRE_MEDIDO)
+        self.bus.pinza.objeto = {"contacto": 3837, "rigidez": 12, "kp": 12}   # llega al tope con 228
+        self.assertIsNotNone(b.cerrar_fruta("limon"))
+
+    def test_fruta_demasiado_blanda_para_sostenerla_no_es_agarre(self):
+        b = self.listo(calibrado=False)
+        b.abrir()
+        b.usar_cierre(CIERRE_MEDIDO)
+        self.bus.pinza.objeto = {"contacto": 3830, "rigidez": 6, "kp": 6}     # llega al tope con 135 < 200
+        self.assertIsNone(b.cerrar_fruta("limon"))
 
     def test_preparar_reinicia_el_gripper_y_borra_la_sobrecarga(self):
         self.bus.pinza.regs[70] = 32                       # 2026-11-02: sobrecarga que bloqueaba todo

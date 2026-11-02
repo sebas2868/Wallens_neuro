@@ -3,7 +3,8 @@
 
 Entradas: odometry/filtered (EKF), brazo/estado, brazo/resultado, battery_state, parada, frutas/detecciones y
 garra/fruta (JSON de detector_frutas). Salidas: cmd_vel (pasa por el freno LiDAR), brazo/orden, camara (qué cámara
-abre detector_frutas: una a la vez, "" = ninguna) y, en un fallo, parada.
+abre detector_frutas: una a la vez, "" = ninguna) y, en un fallo, parada. Con Ctrl+C frena y deja la pinza cerrada
+(ordenes_al_salir: no la toca si lleva fruta); otro Ctrl+C sale sin esperar.
 
 Parámetros: zona_x, zona_y, radio, frutas ("limon,naranja"), entrega_x, entrega_y, angulo_linea, separacion,
 volver_home, desde, hasta (estados de SECUENCIA, "" = sin límite), hz, relativo: true (por defecto) = zona, entrega y
@@ -26,12 +27,13 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Bool, String
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mision_logica import Config, Mision, Pedido, pedido_relativo  # noqa: E402
+from mision_logica import Config, Mision, Pedido, ordenes_al_salir, pedido_relativo  # noqa: E402
 
 from wallens_interfaces.msg import EstadoBrazo  # noqa: E402
 
@@ -39,7 +41,10 @@ from wallens_interfaces.msg import EstadoBrazo  # noqa: E402
 class NodoMision(Node):
     def __init__(self):
         super().__init__("mision_frutas")
-        p = lambda n, d: self.declare_parameter(n, d).value  # noqa: E731
+        def p(n, d):
+            if type(d) is float:                   # "-p entrega_x:=0" llega como entero: se acepta y se pasa a float
+                return float(self.declare_parameter(n, d, ParameterDescriptor(dynamic_typing=True)).value)
+            return self.declare_parameter(n, d).value
         pedido = Pedido(zona=(p("zona_x", 1.0), p("zona_y", 0.0)), radio=p("radio", 0.10),
                         frutas=[f.strip() for f in p("frutas", "limon").split(",") if f.strip()],
                         entrega=(p("entrega_x", 0.0), p("entrega_y", 0.0)), angulo_linea=p("angulo_linea", 0.0),
@@ -53,6 +58,8 @@ class NodoMision(Node):
             self.mision = Mision(pedido, cfg, desde=desde, hasta=hasta)
         self.camara = None
         self.salir = False
+        self.brazo = None                          # último brazo/estado: {congelado, objeto, ocupado}
+        self.resultados = []                       # brazo/resultado recibidos (para cerrar al salir)
         self.estado_log, self.aviso_log = None, None
 
         transitoria = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL, reliability=ReliabilityPolicy.RELIABLE)
@@ -91,16 +98,56 @@ class NodoMision(Node):
         self.mision.on_pose(x, y, th, self.t())
 
     def _al_brazo(self, m):
+        self.brazo = dict(congelado=m.congelado, objeto=m.objeto, ocupado=m.ocupado)
         if self.mision is None:
             return
         self.mision.on_brazo(calibrado=m.calibrado, congelado=m.congelado, objeto=m.objeto, ocupado=m.ocupado, t=self.t())
 
     def _al_resultado(self, m):
+        r = json.loads(m.data)
+        self.resultados.append(r)
         if self.mision is None:
             return
-        r = json.loads(m.data)
         self.get_logger().info(f"brazo: {r}")
         self.mision.on_resultado_brazo(r["orden"], r["ok"], r["texto"])
+
+    def cerrar_al_salir(self):
+        """Ctrl+C: con las ruedas ya a 0, deja la pinza cerrada (ordenes_al_salir). Otro Ctrl+C lo corta."""
+        self.salir = True                          # el timer de la misión ya no manda nada
+        log = self.get_logger()
+        fin = time.monotonic() + 15.0              # a mitad de una orden (cerrar:limon) puede acabar con la fruta
+        while self.brazo and self.brazo["ocupado"] and time.monotonic() < fin:
+            self._esperar(0.2)
+        ordenes = ordenes_al_salir(self.brazo)
+        if not ordenes:
+            log.warn("Ctrl+C: la pinza se deja como está (" +
+                     ("sin brazo/estado" if self.brazo is None else "lleva una fruta") + ")")
+            return
+        log.warn(f"Ctrl+C: dejo la pinza cerrada ({', '.join(ordenes)}); otro Ctrl+C para no esperar")
+        for orden in ordenes:
+            r = None
+            for _ in range(4):                     # cerrar pide las ruedas quietas en /odom: puede tardar un poco
+                self._esperar(0.6)
+                self.resultados.clear()
+                self.pub_orden.publish(String(data=orden))
+                r = self._esperar(15.0, orden)
+                if r is None or r["ok"] or not any(k in r["texto"] for k in ("ruedas", "ocupado")):
+                    break
+            if r is None or not r["ok"]:
+                log.error(f"no pude dejar la pinza cerrada: {orden} -> {r or 'sin respuesta del brazo'}")
+                return
+        log.info(f"pinza cerrada ({r['texto']})")
+
+    def _esperar(self, segundos, orden=None):
+        """Atiende los tópicos `segundos` o hasta el resultado de `orden`, que devuelve."""
+        fin = time.monotonic() + segundos
+        while time.monotonic() < fin and rclpy.ok():
+            self.pub_cmd.publish(Twist())
+            rclpy.spin_once(self, timeout_sec=0.05)
+            r = next((r for r in self.resultados if r["orden"] == orden), None)
+            if r:
+                return r
+        return None
 
     def _al_bateria(self, m):
         if self.mision is None:
@@ -182,12 +229,15 @@ def main():
     # el cmd_vel a 0 y apaga la cámara (con él, el contexto ya está cerrado y esas publicaciones fallan)
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     nodo = NodoMision()
+    ctrl_c = False
     try:
         while rclpy.ok() and not nodo.salir:
             rclpy.spin_once(nodo, timeout_sec=0.1)
         if nodo.salir:
             time.sleep(0.5)                    # que salgan el último cmd_vel, la cámara y la /parada
-    except (KeyboardInterrupt, ExternalShutdownException):
+    except KeyboardInterrupt:
+        ctrl_c = True
+    except ExternalShutdownException:
         pass
     finally:
         try:
@@ -195,6 +245,13 @@ def main():
             nodo.pub_camara.publish(String(data=""))
         except Exception:
             pass
+        if ctrl_c:
+            try:
+                nodo.cerrar_al_salir()
+            except KeyboardInterrupt:          # el segundo Ctrl+C: salir ya
+                nodo.get_logger().warn("salida sin esperar a la pinza")
+            except Exception as e:
+                nodo.get_logger().error(f"no pude dejar la pinza cerrada: {e}")
         nodo.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

@@ -59,7 +59,7 @@ se pidió: abrirla tarda 3.4 s `cam_frutas` y 1.4 s `cam_garra`, medido en la Pi
 
 | Estado | Cámara | Qué hace | Sale cuando | Máx. |
 |---|---|---|---|---|
-| `INICIO` | la del primer estado | Espera odometría, brazo, batería y el detector, **diciendo qué falta**; batería ≥ 14.6 V; brazo congelado sin fruta → orden `rearmar` (queda en el log); congelado con fruta → fallo | todo bien | 60 s |
+| `INICIO` | la del primer estado | Espera odometría, brazo, batería y el detector, **diciendo qué falta**; batería ≥ 14.6 V; brazo congelado sin fruta → orden `rearmar` (queda en el log); congelado con fruta → fallo; luego **cierra la pinza** (`cerrar` en vacío; si agarra algo, fallo) salvo si empieza con fruta o en ABRIR…VERIFICAR | todo bien | 60 s |
 | `IR_A_ZONA` | frutas | Traslado (`_ir_a`) a 0.8 m de la zona rodeando las entregadas; gira hacia ella | llega | 60 s |
 | `BUSCAR` | frutas | Mira (0.6 s de latencia, mínimo 1 s); barre 0°, ±20°, ±40°. Registra todas las frutas de la zona y elige una dirección de aproximación que no toque a las vecinas | 3 detecciones coherentes de la pedida | 40 s |
 | `ACERCAR` | frutas | Si hace falta rodea la fruta a 0.7 m en arcos de ≤ 45°; luego de frente, corrigiendo con la cámara | a 0.36 ± 0.02 m (lo justo para girar con los dedos abiertos) | 90 s |
@@ -176,9 +176,10 @@ dos servicios sin contraseña.
 ```
 scripts/probar.sh agarre          # limón 33 cm detrás, en el eje: cam_garra + gripper (~20 s)
 scripts/probar.sh agarre          # otra vez: ya usa el x_agarre/y_agarre medido
-scripts/probar.sh acercar         # limón 1.2 m al frente: cam_frutas, acercarse y girar 180°
+scripts/probar.sh acercar         # limón a menos de 1 m al frente: cam_frutas, acercarse y girar 180°
 scripts/probar.sh hasta-agarrar   # lo anterior y agarrarlo
-scripts/probar.sh                 # completa: lo deja donde arrancó el robot y se aparta
+scripts/probar.sh                 # completa: lo deja 0.75 m detrás de donde arrancó y se aparta
+scripts/mision.sh -0.75 0         # rápido (sin tests ni preflight): lo deja en x, y respecto al inicio
 MAS="-p w_max:=0.45" scripts/probar.sh acercar   # cualquier campo numérico de Config
 ```
 

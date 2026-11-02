@@ -90,6 +90,10 @@ class DetectorFrutas : public rclcpp::Node {
     cam_x_ = declare_parameter<double>("cam_x", 0.10);
     d_limon_ = declare_parameter<double>("diametro_limon", 0.049);
     d_naranja_ = declare_parameter<double>("diametro_naranja", 0.061);
+    // diámetro aparente (ancho en px a la distancia del suelo) / diámetro de la fruta; frutas reales: 0.87-1.0
+    tam_min_ = declare_parameter<double>("tam_min", 0.6);
+    tam_max_ = declare_parameter<double>("tam_max", 1.6);
+    aspecto_max_ = declare_parameter<double>("aspecto_max", 1.5);   // alto / ancho; una fruta en el suelo, <= 1
     // cam_garra: x = gx[0] + gx[1] u + gx[2] v, y = gy[0] + gy[1] u + gy[2] v (m)
     gx_ = declare_parameter<std::vector<double>>("garra_x", {-0.12581, -0.000019, -0.000403});
     gy_ = declare_parameter<std::vector<double>>("garra_y", {0.075515, -0.000277, 0.000008});
@@ -165,7 +169,7 @@ class DetectorFrutas : public rclcpp::Node {
         --saltar;
         continue;
       }
-      auto manchas = buscar(cuadro);
+      auto manchas = buscar(cuadro, activa == "frutas");
       std_msgs::msg::String m;
       m.data = activa == "garra" ? json_garra(manchas) : json_frutas(manchas);
       (activa == "garra" ? pub_garra_ : pub_frutas_)->publish(m);
@@ -176,7 +180,7 @@ class DetectorFrutas : public rclcpp::Node {
     }
   }
 
-  std::vector<Mancha> buscar(const cv::Mat& bgr) {
+  std::vector<Mancha> buscar(const cv::Mat& bgr, bool frutas) {
     cv::Mat hsv, mascara;
     cv::cvtColor(bgr, hsv, cv::COLOR_BGR2HSV);
     cv::inRange(hsv, cv::Scalar(h_min_, s_min_, v_min_), cv::Scalar(h_max_, 255, 255), mascara);
@@ -189,6 +193,9 @@ class DetectorFrutas : public rclcpp::Node {
       double area = cv::contourArea(c);
       if (area < area_min_) continue;
       cv::Rect r = cv::boundingRect(c);
+      // cam_frutas mira casi horizontal: una fruta en el suelo queda bajo el horizonte. Lo que llega al borde de arriba
+      // es alto (marcos de puerta de madera, muebles) y además se saltaría el filtro de forma por estar cortado
+      if (frutas && r.y <= 1) continue;
       bool cortada = r.x <= 1 || r.y <= 1 || r.x + r.width >= bgr.cols - 1 || r.y + r.height >= bgr.rows - 1;
       double perimetro = cv::arcLength(c, true);
       double circ = perimetro > 0 ? 4 * M_PI * area / (perimetro * perimetro) : 0;
@@ -238,8 +245,15 @@ class DetectorFrutas : public rclcpp::Node {
         if (m.fondo <= fila_horizonte_ + 3) continue;          // sobre el horizonte: no está en el suelo
         z = k_suelo_ / (m.fondo - fila_horizonte_);
       }
+      // cortada por un lado, el ancho miente y el alto sigue entero
+      bool lateral = m.caja.x <= 1 || m.caja.x + m.caja.width >= ancho_ - 1;
+      // alta y estrecha: pata de silla o de mesa, canto de una puerta que no llega arriba
+      if (!lateral && m.caja.height > aspecto_max_ * m.caja.width) continue;
       double y = -(m.u - cx_) * z / f_;
       double d = m.ancho * z / f_;
+      // tamaño imposible para esa distancia: no es la fruta (pie de un marco de puerta, una papelera al fondo)
+      double tam = std::max(d, m.caja.height * z / f_);
+      if (tam < tam_min_ * diam || tam > tam_max_ * diam) continue;
       s << (primera ? "" : ", ") << "{\"tipo\": \"" << m.tipo << "\", \"x\": " << num(cam_x_ + z) << ", \"y\": "
         << num(y) << ", \"d\": " << num(d) << ", \"px\": " << static_cast<int>(m.ancho) << "}";
       primera = false;
@@ -272,7 +286,7 @@ class DetectorFrutas : public rclcpp::Node {
 
   std::string pedida_, disp_frutas_, disp_garra_, formato_frutas_, formato_garra_, dir_depuracion_;
   int ancho_, alto_, fps_, descartar_, h_min_, h_max_, s_min_, v_min_;
-  double h_corte_, area_min_, circularidad_min_, llenado_min_, f_, cx_, fila_horizonte_, k_suelo_, cam_x_, d_limon_,
+  double tam_min_, tam_max_, aspecto_max_, h_corte_, area_min_, circularidad_min_, llenado_min_, f_, cx_, fila_horizonte_, k_suelo_, cam_x_, d_limon_,
       d_naranja_;
   bool depuracion_;
   std::vector<double> gx_, gy_;

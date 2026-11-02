@@ -48,6 +48,7 @@ class Mundo:
         self.fallar_cierres = 0            # los próximos N cierres dan sin_agarre aunque la fruta esté bien
         self.choques = []                  # (t, qué, fruta)
         self.ordenes = []                  # (t, orden)
+        self.con_pinza_abierta = set()     # estados en que las ruedas se movieron con la pinza abierta
         self.falsos = []                   # detecciones falsas (t, tipo, x, y) en base_link, una sola vez cada una
         self.parada = False
         self.t = 0.0
@@ -126,7 +127,7 @@ class Mundo:
             return True, "listo"
         if orden.startswith("cerrar"):
             self.pinza_abierta = False
-            if self.fallar_cierres > 0:
+            if self.fallar_cierres > 0 and orden != "cerrar":   # los de agarre (cerrar:<tipo>)
                 self.fallar_cierres -= 1
                 return True, "sin_agarre"
             for f in self.frutas:
@@ -179,6 +180,8 @@ class Mundo:
             # cinemática: el brazo solo se mueve con las ruedas quietas
             v, w = s.v, s.w
             assert not (self.pendiente and (v or w)), f"{s.estado}: ruedas en marcha con una orden del brazo pendiente"
+            if (v or w) and self.pinza_abierta:
+                self.con_pinza_abierta.add(s.estado)
             self.th = (self.th + w * dt + math.pi) % (2 * math.pi) - math.pi
             self.x += v * math.cos(self.th) * dt
             self.y += v * math.sin(self.th) * dt

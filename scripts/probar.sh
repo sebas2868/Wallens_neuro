@@ -7,11 +7,12 @@
 set -uo pipefail
 AQUI=$(cd "$(dirname "$0")/.." && pwd)
 ETAPA=${1:-completa}
-"$AQUI/scripts/desplegar.sh" || { echo "despliegue fallido: no se prueba nada"; exit 1; }
+# SIN_TESTS=1 (scripts/mision.sh): despliega sin correr los tests
+"$AQUI/scripts/desplegar.sh" ${SIN_TESTS:+--sin-tests} || { echo "despliegue fallido: no se prueba nada"; exit 1; }
 PI=wallens@$("$AQUI/scripts/pi-ip.sh")
 
 entorno=""
-for v in X_AGARRE Y_AGARRE MAS; do
+for v in X_AGARRE Y_AGARRE MAS ENTREGA_X ENTREGA_Y RAPIDO; do
   [ -n "${!v:-}" ] && entorno+="$v=$(printf %q "${!v}") "
 done
 echo "== etapa $ETAPA en la Pi"

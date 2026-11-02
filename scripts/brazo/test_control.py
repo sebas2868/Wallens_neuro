@@ -5,7 +5,7 @@ import threading
 import unittest
 
 from brazo import Brazo, Cero, Config, ControlBrazo, PINZA, TORNILLO
-from brazo.brazo import SOSTEN_FRUTA
+from brazo.brazo import CIERRE_MEDIDO, SOSTEN_FRUTA
 from brazo.test_brazo import CAL, Base, OBJETO
 
 
@@ -236,9 +236,14 @@ class TestOrdenesMision(BaseControl):
         self.bus.pinza.objeto = None
         self.assertEqual(c.orden("cerrar").valor, "sin_agarre")   # CERRAR_VACIO
 
-    def test_cerrar_sin_haber_abierto_se_rechaza(self):
+    def test_cerrar_recien_arrancado_usa_el_cierre_medido(self):
+        # INICIO de la misión cierra la pinza antes de navegar, con el nodo recién arrancado (nunca abrió)
         c = self.control_pinza()
-        self.assertFalse(c.orden("cerrar:naranja").ok)
+        self.bus.pinza.pos = c.brazo.pos_abrir                      # como la dejó la prueba anterior
+        r = c.orden("cerrar")
+        self.assertEqual((r.ok, r.valor), (True, "sin_agarre"), r.mensaje)
+        self.assertEqual(c.brazo.cerrada, CIERRE_MEDIDO)
+        self.assertGreater(self.bus.pinza.pos, CIERRE_MEDIDO - 100)
 
     def test_cerrar_con_las_ruedas_en_marcha_se_rechaza(self):
         c = self.control_pinza(quietas=False)

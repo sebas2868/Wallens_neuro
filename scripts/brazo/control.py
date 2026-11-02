@@ -161,8 +161,8 @@ class ControlBrazo:
         if nombre == "cerrar":
             def f():
                 self._fase("cerrando")
-                if self.brazo.cerrada is None:
-                    return Resultado(False, "abrir antes de cerrar: falta medir el cierre de los dedos")
+                if self.brazo.cerrada is None:       # nodo recién arrancado: INICIO cierra antes de navegar
+                    self.brazo.usar_cierre(CIERRE_MEDIDO)
                 r = "agarrado" if self.brazo.cerrar_fruta(tipo or None) is not None else "sin_agarre"
                 self.objeto = r == "agarrado"
                 return Resultado(True, r, r)

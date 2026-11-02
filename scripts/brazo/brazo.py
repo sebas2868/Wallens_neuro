@@ -415,9 +415,11 @@ class Brazo:
 
     soltar = abrir
 
-    def cerrar_y_apretar(self):
+    def cerrar_y_apretar(self, sosten=None):
         """Cierra despacio hasta sentir contacto y aprieta hasta `corriente_apriete`. Devuelve la posición
-        de la pinza con la fuerza alcanzada, o None si no hay objeto o no agarra (la pinza queda sin soltar)."""
+        de la pinza con la fuerza alcanzada, o None si no hay objeto o no agarra (la pinza queda sin soltar).
+        Con `sosten` (corriente que basta para sostener la fruta), llegar al tope con al menos esa corriente también
+        es agarre: un limón blando se comprime hasta el tope sin llegar al apriete (2026-11-02: 216-230 < 250)."""
         c = self.cfg
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
         self._escribir(PINZA, CORRIENTE_META, 2, c.corriente_agarre)
@@ -463,6 +465,9 @@ class Brazo:
             elif abs(cor) < c.corriente_apriete:    # meta en el tope y aún sin fuerza: no hay agarre
                 en_tope += 1
                 if en_tope >= c.lecturas_tope:
+                    if sosten is not None and abs(cor) >= sosten:
+                        self.log(f"    al tope con corriente {cor} >= sostén {sosten}: agarrada en pos {actual}")
+                        return actual
                     self.log(f"    no agarra (pinza al tope con corriente {cor})")
                     return None
             fuertes = fuertes + 1 if abs(cor) >= c.corriente_apriete else 0
@@ -480,7 +485,7 @@ class Brazo:
         c.corriente_apriete = apriete
         c.corriente_agarre = min(apriete + 40, c.limite_corriente_p - 20)
         try:
-            agarre = self.cerrar_y_apretar()
+            agarre = self.cerrar_y_apretar(SOSTEN_FRUTA.get(tipo))
         finally:
             c.corriente_apriete, c.corriente_agarre = antes
         if agarre is not None and tipo in SOSTEN_FRUTA:

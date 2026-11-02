@@ -1,6 +1,7 @@
 """Pruebas sin ROS ni robot de la máquina de estados de la misión, contra el mundo falso.
 Correr: cd ros/wallens_mision && python3 -m unittest discover -s test -v"""
 import math
+import re
 import os
 import sys
 import unittest
@@ -8,7 +9,8 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 sys.path.insert(0, os.path.dirname(__file__))
 from mision_logica import (RADIOS, Config, Giro, Mision, Pedido, Recta, a_base, a_odom, ang,  # noqa: E402
-                           distancia_a_segmento, obstaculos, pedido_relativo, puntos_entrega, ruta)
+                           distancia_a_segmento, obstaculos, ordenes_al_salir, pedido_relativo, puntos_entrega,
+                           ruta)
 from mundo_falso import Mundo  # noqa: E402
 
 ZONA = (1.0, 1.0)
@@ -95,7 +97,7 @@ class Rutas(unittest.TestCase):
 class Validacion(unittest.TestCase):
     def test_rechaza_pedidos_malos(self):
         for kw in (dict(frutas=[]), dict(frutas=["pera"]), dict(radio=0), dict(separacion=0.15),
-                   dict(entrega=(1.0, 0.7))):
+                   dict(entrega=(1.0, 0.7), frutas=["limon", "naranja"])):   # entrega pegada a la zona
             with self.assertRaises(ValueError, msg=kw):
                 Mision(pedido(**kw))
         with self.assertRaises(ValueError):
@@ -119,6 +121,33 @@ class Inicio(unittest.TestCase):
         self.assertEqual(s.fin[0], "fallo")
         self.assertIn("rearmar", s.fin[1])
 
+    # navega con los dedos cerrados: abiertos (±136 mm) barren frutas y el freno LiDAR usa la huella cerrada
+    TRASLADOS = {"IR_A_ZONA", "BUSCAR", "ACERCAR", "GIRAR", "IR_A_ENTREGA", "VOLVER_HOME"}
+
+    def test_cierra_la_pinza_que_quedo_abierta_antes_de_salir(self):
+        m, w = Mision(pedido()), Mundo(TRES)
+        w.pinza_abierta = True                     # como la dejó la prueba anterior
+        s = correr(w, m)
+        self.assertEqual(s.fin[0], "fin", s.fin)
+        self.assertEqual(w.ordenes[0][1], "cerrar")
+        self.assertEqual(w.con_pinza_abierta & self.TRASLADOS, set())
+
+    def test_brazo_congelado_se_rearma_y_se_cierra_antes_de_salir(self):
+        # el rearme abre la pinza: antes la misión salía a IR_A_ZONA con los dedos abiertos
+        m, w = Mision(pedido()), Mundo(TRES)
+        w.congelado = True
+        s = correr(w, m)
+        self.assertEqual(s.fin[0], "fin", s.fin)
+        self.assertEqual([o for _, o in w.ordenes][:3], ["rearmar", "cerrar", "abrir"])
+        self.assertEqual(w.con_pinza_abierta & self.TRASLADOS, set())
+
+    def test_si_al_cerrar_al_empezar_agarra_algo_no_sale(self):
+        m, w = Mision(pedido()), Mundo(TRES + [("naranja", -0.22, 0.0)])   # una fruta entre los dedos
+        s = correr(w, m)
+        self.assertEqual(s.fin[0], "fallo")
+        self.assertIn("agarró", s.fin[1])
+        self.assertNotIn("IR_A_ZONA", estados(m))
+
     def test_sin_datos_falla_por_tiempo(self):
         m = Mision(pedido())
         s = None
@@ -129,6 +158,23 @@ class Inicio(unittest.TestCase):
         self.assertEqual(s.fin[0], "fallo")
         self.assertTrue(s.parada)
         self.assertEqual(s.v, 0.0)
+
+
+class AlSalir(unittest.TestCase):
+    """Ctrl+C deja la pinza cerrada (mision_frutas.py manda estas órdenes antes de terminar)."""
+    def test_pinza_sin_fruta_se_cierra(self):
+        self.assertEqual(ordenes_al_salir(dict(congelado=False, objeto=False)), ["cerrar"])
+
+    def test_congelada_sin_fruta_se_rearma_y_se_cierra(self):
+        self.assertEqual(ordenes_al_salir(dict(congelado=True, objeto=False)), ["rearmar", "cerrar"])
+
+    def test_con_fruta_no_se_toca(self):
+        # ya está cerrada sobre la fruta; otro cerrar la apretaría con la corriente por defecto (625)
+        self.assertEqual(ordenes_al_salir(dict(congelado=False, objeto=True)), [])
+        self.assertEqual(ordenes_al_salir(dict(congelado=True, objeto=True)), [])
+
+    def test_sin_saber_como_esta_el_brazo_no_se_toca(self):
+        self.assertEqual(ordenes_al_salir(None), [])
 
 
 class MisionCompleta(unittest.TestCase):
@@ -148,7 +194,7 @@ class MisionCompleta(unittest.TestCase):
         w = Mundo(TRES)
         s = correr(w, Mision(pedido()))
         self.assertEqual(s.fin[0], "fin", s.fin)
-        self.assertEqual([o for _, o in w.ordenes], ["abrir", "cerrar:limon", "soltar", "cerrar"])
+        self.assertEqual([o for _, o in w.ordenes], ["cerrar", "abrir", "cerrar:limon", "soltar", "cerrar"])
 
     def test_orden_distinto_y_vuelve_a_home(self):
         p = pedido(frutas=["mandarina", "limon"], volver_home=True)
@@ -224,6 +270,45 @@ class Geometrias(unittest.TestCase):
 
 
 class Busqueda(unittest.TestCase):
+    # probar-mision.sh: el limón a menos de 1 m al frente (zona a 0.6 m, radio 0.25 + margen 0.15) y la entrega detrás
+    CERCA = dict(zona=(0.6, 0.0), radio=0.25, entrega=(-0.75, 0.0), angulo_linea=math.pi / 2)
+
+    def test_limon_a_menos_de_1_m(self):
+        for x, y in ((0.3, 0.0), (0.4, 0.3), (0.5, -0.3), (0.7, 0.0), (0.85, 0.3), (0.95, 0.0)):
+            m, w = Mision(pedido(**self.CERCA)), Mundo([("limon", x, y)])
+            s = correr(w, m)
+            self.assertEqual(s.fin, ("fin", "1 frutas entregadas"), (x, y, s.fin))
+            self.assertEqual(w.choques, [], (x, y))
+
+    def test_un_limon_se_puede_dejar_donde_arranco_el_robot(self):
+        # con una sola fruta la zona queda vacía al agarrarla: la distancia mínima zona-entrega no hace falta
+        for x, y in ((0.4, 0.0), (0.6, 0.25), (0.7, -0.3), (0.95, 0.0)):
+            m, w = Mision(pedido(**dict(self.CERCA, entrega=(0.0, 0.0)))), Mundo([("limon", x, y)])
+            s = correr(w, m)
+            self.assertEqual(s.fin, ("fin", "1 frutas entregadas"), (x, y, s.fin))
+            self.assertEqual(w.choques, [], (x, y))
+            f = w.frutas[0]
+            self.assertLess(math.hypot(f.x, f.y), 0.03, (x, y))
+
+    def test_con_varias_frutas_sigue_pidiendo_distancia(self):
+        with self.assertRaisesRegex(ValueError, "a menos de"):
+            Mision(pedido(**dict(self.CERCA, entrega=(0.0, 0.0), frutas=["limon", "naranja"])))
+
+    def test_mas_cerca_que_d_vista_retrocede_sin_dar_la_vuelta(self):
+        m, w = Mision(pedido(**self.CERCA), hasta="IR_A_ZONA"), Mundo([("limon", 0.5, 0.0)])
+        rumbos = []
+        original = m.paso
+
+        def espia(t):
+            s = original(t)
+            rumbos.append(abs(w.th))
+            return s
+        m.paso = espia
+        s = correr(w, m)
+        self.assertEqual(s.fin, ("fin", "hasta IR_A_ZONA"))
+        self.assertLess(max(rumbos), math.radians(10))
+        self.assertAlmostEqual(w.x, -0.2, delta=0.03)          # a d_vista = 0.8 m del centro de la zona
+
     def test_barre_si_la_fruta_no_esta_al_frente(self):
         # desde el punto de vista (a 0.8 m de la zona, mirando a 45°) el limón está a -20°: fuera de un campo de ±12°
         vista = (1.0 - 0.8 * math.cos(math.radians(45)), 1.0 - 0.8 * math.sin(math.radians(45)))
@@ -239,7 +324,7 @@ class Busqueda(unittest.TestCase):
         self.assertEqual(s.fin[0], "fallo")
         self.assertIn("no encontró limon", s.fin[1])
         self.assertIn("mandarina, naranja", s.fin[1])
-        self.assertEqual(w.ordenes, [])
+        self.assertEqual([o for _, o in w.ordenes], ["cerrar"])     # solo el cierre de INICIO
 
     def test_frutas_pegadas_fallan_sin_tocar_nada(self):
         # centros a 8 cm: con los dedos abiertos (±136 mm) no hay dirección que no toque a la vecina
@@ -247,7 +332,7 @@ class Busqueda(unittest.TestCase):
         s = correr(w, Mision(pedido()))
         self.assertEqual(s.fin[0], "fallo")
         self.assertIn("ninguna dirección", s.fin[1])
-        self.assertEqual(w.ordenes, [])
+        self.assertEqual([o for _, o in w.ordenes], ["cerrar"])     # solo el cierre de INICIO
         self.assertEqual(w.choques, [])
 
     def test_rodea_para_no_tocar_a_la_vecina(self):
@@ -277,6 +362,9 @@ class Busqueda(unittest.TestCase):
         w = Mundo([("limon", 1.0, 1.5)])            # 50 cm fuera del radio
         s = correr(w, Mision(pedido()))
         self.assertIn("no encontró limon", s.fin[1])
+        # prueba real 2026-11-02: limón a 0.7 m con la zona a 1.2 m; el fallo solo decía "vio: naranja"
+        d = float(re.search(r"vio limon fuera de la zona, a ([\d.]+) m", s.fin[1]).group(1))
+        self.assertAlmostEqual(d, 0.5, delta=0.05)
 
     def test_un_falso_positivo_suelto_no_basta(self):
         w = Mundo([])
@@ -359,7 +447,7 @@ class Fallos(unittest.TestCase):
     def test_brazo_que_no_responde_falla_por_tiempo(self):
         w, m = Mundo(TRES, t_brazo=100.0), Mision(pedido())
         s = correr(w, m)
-        self.assertEqual(s.fin, ("fallo", "ABRIR: más de 20 s en el estado"))
+        self.assertEqual(s.fin, ("fallo", "INICIO: más de 60 s en el estado"))   # esperando el cierre inicial
 
     def test_fruta_que_cam_garra_no_ve(self):
         w = Mundo(TRES, garra_x=(5.0, 6.0))          # cam_garra ciega

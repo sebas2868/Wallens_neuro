@@ -23,9 +23,12 @@ DISPOSITIVOS = {"frutas": "/dev/cam_frutas", "garra": "/dev/cam_garra"}
 FORMATOS = {"frutas": "YUYV", "garra": "MJPG"}
 # los del detector (src/detector_frutas.cpp); antes del 2026-11-02 eran s_min 70 y v_min 50
 UMBRALES = dict(h_min=10, h_max=75, s_min=60, v_min=20, h_corte=32.0, area_min=150.0, circularidad_min=0.55,
-                llenado_min=0.5)
+                llenado_min=0.5, tam_min=0.6, tam_max=1.6, aspecto_max=1.5)
 GARRA_X = (-0.12581, -0.000019, -0.000403)
 GARRA_Y = (0.075515, -0.000277, 0.000008)
+# cam_frutas (los parámetros del detector)
+F, CX, FILA_HORIZONTE, K_SUELO, CAM_X = 770.0, 320.0, 256.6, 63.4, 0.10
+DIAMETRO = {"limon": 0.049, "naranja": 0.061}
 
 
 def grabar(camara, segundos, descartar=5):
@@ -55,7 +58,7 @@ def grabar(camara, segundos, descartar=5):
     return destino
 
 
-def buscar(bgr, u):
+def buscar(bgr, u, frutas=False):
     """Lo mismo que DetectorFrutas::buscar: [(tipo, cu, cv, área, caja, hsv medianos)] y la máscara."""
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     mascara = cv2.inRange(hsv, (u["h_min"], u["s_min"], u["v_min"]), (u["h_max"], 255, 255))
@@ -68,6 +71,8 @@ def buscar(bgr, u):
         if area < u["area_min"]:
             continue
         x, y, w, h = cv2.boundingRect(c)
+        if frutas and y <= 1:       # cam_frutas: lo que toca el borde de arriba es alto (puerta, mueble), no una fruta
+            continue
         cortada = x <= 1 or y <= 1 or x + w >= bgr.shape[1] - 1 or y + h >= bgr.shape[0] - 1
         perimetro = cv2.arcLength(c, True)
         circ = 4 * np.pi * area / perimetro ** 2 if perimetro > 0 else 0
@@ -92,6 +97,41 @@ def buscar(bgr, u):
     return salida, mascara
 
 
+def en_suelo(mancha, u, ancho_img=640, alto_img=480):
+    """Lo mismo que DetectorFrutas::json_frutas con una mancha de buscar(..., frutas=True), que ya quitó lo que toca
+    el borde de arriba: ({tipo, x, y, d, px}, None) o (None, motivo). La madera de puertas y muebles tiene el tono de
+    la naranja; se descarta porque es alta y estrecha o no tiene tamaño de fruta para esa distancia."""
+    tipo, cu, _, _, (x, y, w, h), _ = mancha
+    diam = DIAMETRO[tipo]
+    fondo = y + h
+    if fondo >= alto_img - 2:
+        z = F * diam / max(w, 1)              # toca el borde de abajo: por el tamaño
+    elif fondo <= FILA_HORIZONTE + 3:
+        return None, "sobre el horizonte"
+    else:
+        z = K_SUELO / (fondo - FILA_HORIZONTE)
+    lateral = x <= 1 or x + w >= ancho_img - 1  # cortada por un lado, el ancho miente y el alto sigue entero
+    if not lateral and h > u["aspecto_max"] * w:
+        return None, "alta y estrecha"
+    d = w * z / F
+    tam = max(d, h * z / F)
+    if tam < u["tam_min"] * diam:
+        return None, "pequeña"
+    if tam > u["tam_max"] * diam:
+        return None, "grande"
+    return {"tipo": tipo, "x": CAM_X + z, "y": -(cu - CX) * z / F, "d": d, "px": w}, None
+
+
+def en_suelo_todas(bgr, u):
+    """[(fruta o None, motivo o None)] de cada mancha del cuadro de cam_frutas."""
+    return [en_suelo(m, u, bgr.shape[1], bgr.shape[0]) for m in buscar(bgr, u, frutas=True)[0]]
+
+
+def frutas_en_suelo(bgr, u):
+    """Lo que publicaría detector_frutas en frutas/detecciones con este cuadro."""
+    return [f for f, _ in en_suelo_todas(bgr, u) if f]
+
+
 def evaluar(directorio, u, nombre="", guardar=True):
     cuadros = sorted(glob.glob(os.path.join(os.path.expanduser(directorio), "[0-9]*.jpg")))
     if not cuadros:
@@ -99,7 +139,7 @@ def evaluar(directorio, u, nombre="", guardar=True):
     vistos, tipos, xs, ys, hsvs, areas, racha, peor = 0, {}, [], [], [], [], 0, 0
     for i, ruta in enumerate(cuadros):
         f = cv2.imread(ruta)
-        manchas, mascara = buscar(f, u)
+        manchas, mascara = buscar(f, u, frutas="frutas" in os.path.basename(os.path.normpath(directorio)))
         if manchas:
             vistos, racha = vistos + 1, 0
             tipo, cu, cv_, area, caja, mediana = max(manchas, key=lambda m: m[3])
