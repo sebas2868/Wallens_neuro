@@ -62,7 +62,7 @@ se pidió: abrirla tarda 3.4 s `cam_frutas` y 1.4 s `cam_garra`, medido en la Pi
 | `INICIO` | la del primer estado | Espera odometría, brazo, batería y el detector, **diciendo qué falta**; batería ≥ 14.6 V; brazo congelado sin fruta → orden `rearmar` (queda en el log); congelado con fruta → fallo | todo bien | 60 s |
 | `IR_A_ZONA` | frutas | Traslado (`_ir_a`) a 0.8 m de la zona rodeando las entregadas; gira hacia ella | llega | 60 s |
 | `BUSCAR` | frutas | Mira (0.6 s de latencia, mínimo 1 s); barre 0°, ±20°, ±40°. Registra todas las frutas de la zona y elige una dirección de aproximación que no toque a las vecinas | 3 detecciones coherentes de la pedida | 40 s |
-| `ACERCAR` | frutas | Si hace falta rodea la fruta a 0.7 m en arcos de ≤ 45°; luego de frente, corrigiendo con la cámara | a 0.40 ± 0.02 m | 90 s |
+| `ACERCAR` | frutas | Si hace falta rodea la fruta a 0.7 m en arcos de ≤ 45°; luego de frente, corrigiendo con la cámara | a 0.36 ± 0.02 m (lo justo para girar con los dedos abiertos) | 90 s |
 | `GIRAR` | garra | 180° en el sitio: el gripper queda mirando a la fruta | ± 2° | 20 s |
 | `ABRIR` | garra | orden `abrir` | el brazo responde | 20 s |
 | `RETROCEDER` | garra | Marcha atrás ≤ 0.03 m/s hacia la estimación, corrigiendo el rumbo. Cada cuadro de `cam_garra` a < 10 cm de la estimación (5 cm ya confirmada) la corrige a medias; los demás se ignoran. Si la estimación está dentro del campo de `cam_garra` y no la ve en 0.6 s: **para** y espera 1.5 s; si sigue sin verla y ya estaba confirmada, sigue con la odometría ≤ 6 cm (pasa bajo la cámara); si no, `REINTENTO` | estimación en la zona de agarre (± 1.5 cm, ± 1.2 cm) con ≥ 2 confirmaciones | 40 s, ≤ 0.30 m |

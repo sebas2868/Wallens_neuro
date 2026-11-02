@@ -75,6 +75,9 @@ class DetectorFrutas : public rclcpp::Node {
     h_corte_ = declare_parameter<double>("h_corte", 32.0);         // tono mediano: debajo naranja, encima limón
     area_min_ = declare_parameter<double>("area_min", 150.0);
     circularidad_min_ = declare_parameter<double>("circularidad_min", 0.55);
+    // de cerca (cam_garra) la sombra de la fruta se pega a la mancha y la deja poco redonda (0.49 medido): vale igual
+    // si el círculo inscrito ocupa al menos esto de la mancha, y la fruta es ese círculo (limón con sombra: 0.76)
+    llenado_min_ = declare_parameter<double>("llenado_min", 0.5);
     depuracion_ = declare_parameter<bool>("depuracion", false);
     // el pool de hilos de OpenCV reparte cada operación pequeña en 4 núcleos y espera girando: ~1.9 núcleos con una
     // cámara a 7.5 Hz (medido 2026-11-02); con 1 hilo hace lo mismo
@@ -189,9 +192,23 @@ class DetectorFrutas : public rclcpp::Node {
       bool cortada = r.x <= 1 || r.y <= 1 || r.x + r.width >= bgr.cols - 1 || r.y + r.height >= bgr.rows - 1;
       double perimetro = cv::arcLength(c, true);
       double circ = perimetro > 0 ? 4 * M_PI * area / (perimetro * perimetro) : 0;
-      if (!cortada && circ < circularidad_min_) continue;   // forma: redonda (cortada por el borde no se puede saber)
       cv::Mat m1 = cv::Mat::zeros(mascara.size(), CV_8U);
       cv::drawContours(m1, std::vector<std::vector<cv::Point>>{c}, 0, 255, cv::FILLED);
+      cv::Moments mo = cv::moments(c);
+      double u = mo.m10 / mo.m00, v = mo.m01 / mo.m00, fondo = r.y + r.height, ancho = r.width;
+      if (!cortada && circ < circularidad_min_) {   // forma: redonda (cortada por el borde no se puede saber)
+        cv::Mat dist;
+        cv::distanceTransform(m1(r), dist, cv::DIST_L2, 5);
+        double radio;
+        cv::Point centro;
+        cv::minMaxLoc(dist, nullptr, &radio, nullptr, &centro);
+        if (M_PI * radio * radio < llenado_min_ * area) continue;
+        u = r.x + centro.x, v = r.y + centro.y, fondo = v + radio, ancho = 2 * radio;   // la fruta, sin la sombra
+        r = cv::Rect(cv::Point(u - radio, v - radio), cv::Point(u + radio, v + radio)) &
+            cv::Rect(0, 0, bgr.cols, bgr.rows);
+        m1.setTo(0);
+        cv::circle(m1, cv::Point(u, v), static_cast<int>(radio), 255, cv::FILLED);
+      }
       cv::bitwise_and(m1, mascara, m1);
       std::vector<uchar> tonos;
       for (int y = r.y; y < r.y + r.height; y += 2) {
@@ -203,9 +220,7 @@ class DetectorFrutas : public rclcpp::Node {
       if (tonos.empty()) continue;
       std::nth_element(tonos.begin(), tonos.begin() + tonos.size() / 2, tonos.end());
       double tono = tonos[tonos.size() / 2];
-      cv::Moments mo = cv::moments(c);
-      salida.push_back({tono < h_corte_ ? "naranja" : "limon", mo.m10 / mo.m00, mo.m01 / mo.m00,
-                        static_cast<double>(r.y + r.height), static_cast<double>(r.width), area, r});
+      salida.push_back({tono < h_corte_ ? "naranja" : "limon", u, v, fondo, ancho, area, r});
     }
     return salida;
   }
@@ -257,7 +272,8 @@ class DetectorFrutas : public rclcpp::Node {
 
   std::string pedida_, disp_frutas_, disp_garra_, formato_frutas_, formato_garra_, dir_depuracion_;
   int ancho_, alto_, fps_, descartar_, h_min_, h_max_, s_min_, v_min_;
-  double h_corte_, area_min_, circularidad_min_, f_, cx_, fila_horizonte_, k_suelo_, cam_x_, d_limon_, d_naranja_;
+  double h_corte_, area_min_, circularidad_min_, llenado_min_, f_, cx_, fila_horizonte_, k_suelo_, cam_x_, d_limon_,
+      d_naranja_;
   bool depuracion_;
   std::vector<double> gx_, gy_;
   std::mutex mutex_;

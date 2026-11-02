@@ -4,7 +4,7 @@
   grabar   en la Pi, con la cámara libre (la misión apagada o publicando camara ""): N s de cuadros en
            ~/.cache/wallens/grabaciones/<cámara>-<fecha>/ (JPEG; el cuadro 0 es tras descartar los de exposición)
   evaluar  en la Pi o en el PC: corre el mismo filtro que src/detector_frutas.cpp (HSV, apertura 5x5, cierre 7x7,
-           área, circularidad) y dice en cuántos cuadros ve fruta, de qué tipo, el HSV de la mancha y dónde queda
+           área, circularidad o círculo inscrito) y dice en cuántos cuadros ve fruta, de qué tipo, el HSV de la mancha y dónde queda
            con la calibración de cam_garra. Guarda el primer cuadro anotado y su máscara al lado.
 
 Uso:  python3 scripts/vision/camara.py grabar --camara=garra --segundos=20
@@ -22,7 +22,8 @@ import numpy as np
 DISPOSITIVOS = {"frutas": "/dev/cam_frutas", "garra": "/dev/cam_garra"}
 FORMATOS = {"frutas": "YUYV", "garra": "MJPG"}
 # los del detector (src/detector_frutas.cpp); antes del 2026-11-02 eran s_min 70 y v_min 50
-UMBRALES = dict(h_min=10, h_max=75, s_min=60, v_min=20, h_corte=32.0, area_min=150.0, circularidad_min=0.55)
+UMBRALES = dict(h_min=10, h_max=75, s_min=60, v_min=20, h_corte=32.0, area_min=150.0, circularidad_min=0.55,
+                llenado_min=0.5)
 GARRA_X = (-0.12581, -0.000019, -0.000403)
 GARRA_Y = (0.075515, -0.000277, 0.000008)
 
@@ -70,17 +71,24 @@ def buscar(bgr, u):
         cortada = x <= 1 or y <= 1 or x + w >= bgr.shape[1] - 1 or y + h >= bgr.shape[0] - 1
         perimetro = cv2.arcLength(c, True)
         circ = 4 * np.pi * area / perimetro ** 2 if perimetro > 0 else 0
-        if not cortada and circ < u["circularidad_min"]:
-            continue
         m1 = np.zeros(mascara.shape, np.uint8)
         cv2.drawContours(m1, [c], 0, 255, cv2.FILLED)
+        mo = cv2.moments(c)
+        cu, cv = mo["m10"] / mo["m00"], mo["m01"] / mo["m00"]
+        if not cortada and circ < u["circularidad_min"]:
+            # la sombra pegada a la fruta: vale si el círculo inscrito llena la mancha, y la fruta es ese círculo
+            _, radio, _, (px, py) = cv2.minMaxLoc(cv2.distanceTransform(m1[y:y + h, x:x + w], cv2.DIST_L2, 5))
+            if np.pi * radio * radio < u["llenado_min"] * area:
+                continue
+            cu, cv = x + px, y + py
+            x, y, w, h = int(cu - radio), int(cv - radio), int(2 * radio), int(2 * radio)
+            m1[:] = 0
+            cv2.circle(m1, (int(cu), int(cv)), int(radio), 255, cv2.FILLED)
         dentro = hsv[(m1 > 0) & (mascara > 0)]
         if not len(dentro):
             continue
         mediana = np.median(dentro, axis=0)
-        mo = cv2.moments(c)
-        salida.append(("naranja" if mediana[0] < u["h_corte"] else "limon", mo["m10"] / mo["m00"],
-                       mo["m01"] / mo["m00"], area, (x, y, w, h), mediana))
+        salida.append(("naranja" if mediana[0] < u["h_corte"] else "limon", cu, cv, area, (x, y, w, h), mediana))
     return salida, mascara
 
 

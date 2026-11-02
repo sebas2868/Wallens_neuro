@@ -51,7 +51,8 @@ class Config:
     tol_giro: float = math.radians(2)
     # geometría (base_link: punto medio del eje de ruedas)
     d_vista: float = 0.80            # m del centro de la zona donde se detiene a mirar
-    d_parada: float = 0.40           # m de la fruta antes del giro: alcance del gripper (0.285) + fruta + margen
+    d_parada: float = 0.36           # m de la fruta antes del giro: lo que barren los dedos ABIERTOS al girar (0.316,
+                                     # tras un REINTENTO) + fruta + 2 cm; menos retroceso a ciegas (antes 0.40)
     tol_parada: float = 0.02
     # zona de agarre: dónde ve cam_garra la fruta ya agarrada (VERIFICAR lo registra en `agarre_visto`); en el marco
     # de cam_garra, que puede no coincidir con la huella (docs/mision-frutas-plan.md, «Geometría del agarre»)
