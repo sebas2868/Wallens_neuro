@@ -1,0 +1,8 @@
+# Lista de operaciones que el hilo de motores del driver ejecuta en orden.
+# Se para en la primera que falla; las siguientes quedan NO_EJECUTADA.
+OperacionDxl[] operaciones
+---
+bool aceptada
+string motivo              # por qué se rechazó toda la llamada (presupuesto, demasiadas operaciones, cola llena, bus apagado)
+ResultadoDxl[] resultados
+float32 tiempo_bus_ms
