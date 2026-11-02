@@ -1,12 +1,10 @@
 freno_lidar:
   ros__parameters:
-    # Huella del robot sobre base_link (medida 2026-11-01): chasis redondo de 296 mm centrado en el eje de las ruedas y el
-    # gripper detrás, sobresale 133 mm y mide ~30 mm de ancho (se usan 50 mm). Con chassis_radius 0 vuelve al cono desde el
-    # LiDAR (half_angle_deg) y el giro no se frena. La misma huella está en nav2.yaml de wallens_nav.
-    chassis_radius: 0.148       # m
-    gripper_length: 0.133       # m que sobresale el gripper por detrás del círculo (llega a 0.281 m de base_link)
-    gripper_half_width: 0.025   # m, mitad del ancho del gripper (30 mm medidos + margen)
-    laser_x: 0.108              # m, LiDAR delante de base_link (TF de lidar.launch.py)
+    # Huella sobre base_link (x adelante): chasis de 296 mm, carro y dedos CERRADOS detrás (modelo del 29 oct,
+    # scripts/modelo/huella_modelo.py). Idéntica en nav2.yaml; un test falla si difieren. Vacía = cono desde el LiDAR
+    # (half_angle_deg) y el giro no se frena. Dedos abiertos: no cabe aquí (±136 mm), abrir solo con el robot quieto.
+    footprint: "[[0.151, 0.000], [0.139, 0.058], [0.107, 0.107], [0.058, 0.139], [0.000, 0.151], [-0.058, 0.139], [-0.107, 0.107], [-0.121, 0.085], [-0.175, 0.085], [-0.175, 0.035], [-0.285, 0.035], [-0.285, -0.035], [-0.175, -0.035], [-0.175, -0.085], [-0.121, -0.085], [-0.107, -0.107], [-0.058, -0.139], [0.000, -0.151], [0.058, -0.139], [0.107, -0.107], [0.139, -0.058]]"
+    laser_x: 0.089              # m, centro de giro del LiDAR delante de base_link (TF de lidar.launch.py)
     lateral_margin: 0.03        # m extra a cada lado del pasillo vigilado
     turn_margin: 0.03           # m de margen alrededor de la huella al simular el giro
     turn_horizon: 0.5           # s de giro simulados (a 0.5 rad/s, ~14°)
@@ -20,3 +18,6 @@ freno_lidar:
     min_valid_readings: 10      # lecturas válidas mínimas en el sector; con menos (LiDAR tapado) se bloquea el avance
     require_scan: true          # false deja avanzar sin LiDAR (solo para pruebas)
     cmd_timeout: 0.25           # s sin /cmd_vel: no se republica nada (el driver frena solo); Nav2 y los scripts publican a >= 10 Hz
+    # Solo con el freno en C++ (freno:=cpp), que lleva dentro el vigilante del LiDAR (con freno:=py lo hace vigilante_lidar.py)
+    scan_lost_s: 5.0            # s sin /scan para reiniciar el nodo del LiDAR (pkill -INT)
+    cooldown_s: 15.0            # s mínimos entre reinicios

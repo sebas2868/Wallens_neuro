@@ -1,5 +1,5 @@
 # ROS 2 Jazzy en el PC para hablar con la Pi del robot (misma versión que la Pi: Humble y Jazzy no se entienden por DDS).
-# Trae RViz, teleop y herramientas de TF. Se usa con scripts/pc-ros.sh, que monta el repo en /wallens.
+# Trae RViz, teleop, herramientas de TF, slam_toolbox y Nav2 (mapa y destinos desde RViz). Se usa con scripts/pc-ros.sh, que monta el repo en /wallens.
 FROM ros:jazzy-ros-base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-jazzy-tf2-tools \
       ros-jazzy-rqt-graph \
       ros-jazzy-rqt-tf-tree \
+      ros-jazzy-slam-toolbox \
+      ros-jazzy-nav2-map-server \
+      ros-jazzy-nav2-bringup \
+      ros-jazzy-nav2-rviz-plugins \
       libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 

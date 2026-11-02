@@ -10,7 +10,7 @@ ros2 launch ~/wallens/launch/lidar.launch.py
 ros2 topic echo /scan --once
 ```
 
-Lanza el driver y la TF estática `base_link → base_laser` (x = 0.108 m, z = 0.12675 m, yaw −90°; ajustar
+Lanza el driver y la TF estática `base_link → base_laser` (x = 0.089 m al centro de giro, z = 0.12675 m, yaw −90°; ajustar
 en `launch/lidar.launch.py` al montaje real).
 
 ## Prueba de aceptación

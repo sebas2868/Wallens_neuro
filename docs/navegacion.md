@@ -37,11 +37,11 @@ Paquete `ros/wallens_nav`. Criterio de diseño: poca CPU y poca energía (LiPo 4
 |---|---|---|
 | SLAM | `slam_toolbox` online asíncrono, 5 cm, 1 de cada 2 scans, solo tras 30 cm o 20°, `/map` cada 5 s, alcance 8 m, cierre de lazo con cadenas de 15 y búsqueda de 2 m | El LD19 va a 10 Hz fijo: se descartan scans en vez de bajar el sensor. A 0.10 m/s procesa ~1 scan cada 3 s en recta. Asíncrono: si va atrasado, tira scans en vez de encolarlos |
 | Localización | Sin AMCL: la da el propio SLAM (TF `map -> odom`) | Un nodo menos |
-| Controlador | Regulated Pure Pursuit a 10 Hz, 0.10 m/s, sin marcha atrás, giro en el sitio solo si el camino sale a más de 60°, sin giro final (`yaw_goal_tolerance` 6.28) | Cuenta geométrica barata (MPPI o DWB muestrean cientos de trayectorias). Los giros en el sitio patinan y gastan. 10 Hz da 2.5 veces margen sobre el `cmd_timeout` de 0.25 s |
+| Controlador | Regulated Pure Pursuit a 10 Hz, 0.19 m/s, sin marcha atrás, giro en el sitio solo si el camino sale a más de 60°, sin giro final (`yaw_goal_tolerance` 6.28) | Cuenta geométrica barata (MPPI o DWB muestrean cientos de trayectorias). Los giros en el sitio patinan y gastan. 10 Hz da 2.5 veces margen sobre el `cmd_timeout` de 0.25 s |
 | Planificador | NavFn (A*) y árbol `explorar.xml`: replanifica solo si el camino deja de ser válido (revisa a 1 Hz) | No planifica a ritmo fijo |
 | Recuperaciones | Limpiar costmaps, esperar 3 s, retroceder 15 cm a 0.05 m/s; 3 reintentos; sin `Spin` | El giro de recuperación patina y gasta; si no hay camino, explore_lite descarta la frontera |
 | Costmaps | Local 2 x 2 m a 4 Hz (publica a 1 Hz); global a 1 Hz (publica a 0.2 Hz), capa estática del `/map` + obstáculos del scan | Pequeños y lentos |
-| Huella | Chasis redondo de 296 mm + gripper detrás (133 x 30 mm, se usan 50 de ancho): polígono de `huella_wallens()`; inflación 0.35 m | La misma en el freno y en Nav2; el gripper llega a 28.1 cm del centro y barre al girar |
+| Huella | Chasis redondo de 296 mm + carro (±85 mm hasta x=-0.175) y dedos cerrados (±35 mm hasta x=-0.285), medidas del modelo del 29 oct (`scripts/modelo/huella_modelo.py`): parámetro `footprint`; inflación 0.35 m | La misma en el freno y en Nav2; el gripper llega a 28.1 cm del centro y barre al girar |
 | Rampa | La del motor (`profile_acceleration`), sin `velocity_smoother` | Un nodo menos; aceleraciones suaves ya en el hardware |
 | Seguridad | Nav2 publica `/cmd_vel`, que pasa por `freno_lidar`; sin `collision_monitor` | El freno ya filtra y frena el giro por la huella |
 | Exploración | `explore_lite` (m-explore-ros2, commit fijo): fronteras cada 5 s, peso alto a la distancia (fronteras cercanas), sin volver al inicio, descarta una frontera tras 30 s sin acercarse | Trayectorias cortas; al acabar se queda donde está |
@@ -51,6 +51,10 @@ Paquete `ros/wallens_nav`. Criterio de diseño: poca CPU y poca energía (LiPo 4
 
 Obstáculos bajos: el LiDAR (a 16 cm del suelo) no ve nada más bajo. **Riesgo aceptado** (2026-11-01): mapear solo en un
 espacio sin objetos sueltos de menos de 16 cm (o cerrarlo con cajas altas). Un sensor frontal queda para más adelante.
+
+Dedos y carro: se navega con los dedos cerrados; abiertos llegan a ±136 mm y no caben en la huella, así que solo se abren con el
+robot quieto. Con el carro abajo los dedos quedan a unos 5 mm del suelo (según el modelo): sin cables ni desniveles en el
+recorrido hasta que el nodo del brazo pueda garantizar el carro arriba.
 
 ### Cómo lanzar, guardar el mapa y parar
 

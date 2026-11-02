@@ -89,7 +89,7 @@ class TestHoming(Base):
 
     def test_homing_con_la_configuracion_por_defecto_no_deja_el_tornillo_encajado(self):
         b = self.listo(calibrado=False)
-        self.assertEqual((Config().vel_busqueda, Config().corriente_busqueda), (87, 120))
+        self.assertEqual((Config().vel_busqueda, Config().corriente_busqueda), (87, 90))
         self.assertEqual(b.calibrar(), "homing")
         self.assertFalse(self.bus.tornillo.encajado)
 

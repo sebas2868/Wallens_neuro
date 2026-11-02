@@ -1,6 +1,6 @@
 """Prueba del freno por LiDAR: manda /cmd_vel hacia adelante (0.05 m/s, 2 s) y muestra qué sale por /cmd_vel_safe,
 /freno_obstaculo y cuánto se movió la odometría. Con un obstáculo a menos de 15 cm del borde
-delantero del chasis (~19 cm del LiDAR; freno por huella, wallens_safety.yaml) el robot NO debe moverse;
+delantero del chasis (~21 cm del LiDAR; freno por huella, wallens_safety.yaml) el robot NO debe moverse;
 sin obstáculo avanza unos 10 cm. Necesita robot.launch.py en marcha (el servicio wallens).
 Con giro (w en rad/s): el freno corta el giro si la huella (el gripper, que barre detrás) toca algo al girar.
 Uso: python3 prueba-freno.py [velocidad] [giro]   (velocidad negativa: hacia atrás; p. ej. 0 0.3 = solo girar)"""

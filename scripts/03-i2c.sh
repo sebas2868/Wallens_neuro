@@ -6,7 +6,7 @@
 set -euo pipefail
 
 CFG=/boot/firmware/config.txt
-OVERLAY='dtoverlay=i2c-gpio,bus=1,i2c_gpio_sda=2,i2c_gpio_scl=3,i2c_gpio_delay_us=10'
+OVERLAY='dtoverlay=i2c-gpio,bus=1,i2c_gpio_sda=2,i2c_gpio_scl=3,i2c_gpio_delay_us=3'
 NUEVO=$(mktemp)
 trap 'rm -f "$NUEVO"' EXIT
 

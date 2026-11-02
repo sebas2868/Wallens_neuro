@@ -1,4 +1,5 @@
 """Lógica del freno LiDAR sin ROS: la usa freno_lidar.py y se prueba en test/ con scans y comandos sintéticos."""
+import json
 import math
 
 
@@ -26,6 +27,19 @@ def puntos_base(rangos, angulo_min, incremento, yaw, laser_x, minimo):
             a = angulo_min + i * incremento + yaw
             pts.append((laser_x + r * math.cos(a), r * math.sin(a)))
     return pts
+
+
+def parsear_huella(texto):
+    """Polígono [(x, y), ...] desde el texto de `footprint` (mismo formato que Nav2). "" = sin huella (None)."""
+    if not texto.strip():
+        return None
+    try:
+        puntos = [(float(x), float(y)) for x, y in json.loads(texto)]
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"footprint inválido: {texto!r}") from e
+    if len(puntos) < 3:
+        raise ValueError(f"footprint con menos de 3 puntos: {texto!r}")
+    return puntos
 
 
 def huella_wallens(radio, largo_gripper, semiancho_gripper, lados=16):

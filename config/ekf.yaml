@@ -1,6 +1,7 @@
 ekf_filter_node:
   ros__parameters:
-    frequency: 30.0
+    frequency: 20.0             # Hz; RPP va a 10 Hz y el robot a 0.10 m/s. Menos /tf y /odometry/filtered para todos los lectores
+    print_diagnostics: false    # nadie lee /diagnostics
     two_d_mode: true
     publish_tf: true            # el EKF publica odom -> base_link (el driver de ruedas lleva publish_tf: false)
     map_frame: map

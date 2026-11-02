@@ -15,7 +15,7 @@ MODELO = 1030            # XM430-W210
 VOLTAJE_MIN, VOLTAJE_MAX, TEMP_MAX = 10.0, 14.8, 55
 ESPERA = 30              # s máximos reintentando la fase previa
 VENTANA = 4.0            # s de la ventana para medir frecuencias
-MIN_HZ = {"/scan": 5.0, "/bno055/imu": 20.0, "/odom": 20.0, "/odometry/filtered": 20.0}
+MIN_HZ = {"/scan": 5.0, "/bno055/imu": 15.0, "/odom": 20.0, "/odometry/filtered": 15.0}   # IMU y EKF van a 20 Hz
 VOLTAJE_BATERIA_AVISO = 14.4   # V, igual que warn_cell_voltage * 4 de wallens_power
 fallos, avisos = [], []
 

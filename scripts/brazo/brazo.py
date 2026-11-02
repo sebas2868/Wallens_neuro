@@ -54,7 +54,7 @@ class Config:
     acel_tornillo: int = 20          # Profile Acceleration (214.577 rev/min² por unidad)
     vel_busqueda: int = 87           # homing y despegue (~20 rpm); a 100 (23 rpm) el tornillo se encajó en el tope
     acel_busqueda: int = 10
-    corriente_busqueda: int = 120    # tope de torque del homing (Goal Current, 2.69 mA por unidad): ~320 mA
+    corriente_busqueda: int = 90     # tope de torque del homing y de la detección de la base (Goal Current, 2.69 mA por unidad): ~240 mA
     corriente_tornillo: int = 150    # ~400 mA
     corriente_retiro: int = 250      # para despegar del tope (~670 mA)
     corriente_aborto_t: int = 250    # sobre esto sostenido, algo frena el tornillo
@@ -66,7 +66,7 @@ class Config:
     avance_tope: int = 5             # ticks bajo los cuales el tornillo está detenido (homing)
     ventanas_tope: int = 2           # ventanas seguidas detenido para dar el tope por cierto
     gracia: float = 1.0              # s iniciales sin buscar tope
-    corriente_tope: int = 40         # corriente mínima con el tornillo detenido para llamarlo tope
+    corriente_tope: int = 50         # corriente mínima con el tornillo detenido para llamarlo tope (medido: 55-59 contra el tope)
     llegada_t: int = 8               # ticks de tolerancia
     tiempo_max_t: float = 60         # s máximos por tramo
     tiempo_homing: float = 90        # s máximos buscando el tope

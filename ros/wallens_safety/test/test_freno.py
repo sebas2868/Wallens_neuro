@@ -327,3 +327,55 @@ def test_huella_giro_frenado_se_retiene_si_el_choque_falta_en_un_scan():
     g = con_huella()
     assert ciclo_con(g, 0.0, 0.3, [(-0.25, -0.08)], t=10.0)[2]
     assert not ciclo_con(g, 0.0, 0.3, [(0.5, 0.5)], t=11.1)[2]          # pasado 1 s sin verlo: suelta
+
+
+# --- Huella real (`footprint`): una sola forma en el freno y en Nav2, y LiDAR en el mismo sitio en todas partes ---
+import re  # noqa: E402
+
+from freno_logica import dentro, parsear_huella  # noqa: E402
+
+RAIZ = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+
+
+def _leer(ruta):
+    with open(os.path.join(RAIZ, ruta), encoding="utf8") as f:
+        return f.read()
+
+
+HUELLA_FRENO = re.search(r'footprint: "(.*)"', _leer("ros/wallens_safety/config/wallens_safety.yaml")).group(1)
+
+
+def test_huella_igual_en_freno_y_nav2():
+    copias = re.findall(r'^\s*footprint: "(.*)"', _leer("ros/wallens_nav/config/nav2.yaml"), re.M)
+    assert len(copias) == 2                         # local_costmap y global_costmap
+    assert all(parsear_huella(c) == parsear_huella(HUELLA_FRENO) for c in copias)
+
+
+def test_posicion_del_lidar_igual_en_todas_partes():
+    laser_x = re.search(r"laser_x: ([\d.]+)", _leer("ros/wallens_safety/config/wallens_safety.yaml")).group(1)
+    assert f"arguments=['{laser_x}'," in _leer("launch/lidar.launch.py")
+    assert f"'base_link_to_base_laser', {laser_x}," in _leer("launch/robot.launch.py")
+
+
+def test_huella_real_incluye_carro_y_dedos_cerrados():
+    P = parsear_huella(HUELLA_FRENO)
+    assert dentro(P, -0.165, 0.08) and dentro(P, -0.165, -0.08)     # carro, que la huella anterior dejaba fuera
+    assert dentro(P, -0.28, 0.03) and dentro(P, -0.28, -0.03)       # punta de los dedos
+    assert not dentro(P, -0.20, 0.05) and not dentro(P, -0.29, 0.0)  # al lado de los dedos y detrás de la punta
+
+
+def test_giro_se_frena_si_el_carro_barreria_un_objeto():
+    f = nuevo(dist=0.15, huella=parsear_huella(HUELLA_FRENO), laser_x=LASER_X)
+    assert ciclo_con(f, 0.0, 0.5, [(-0.22, -0.12)])[1] == 0.0
+    viejo = nuevo(dist=0.15, huella=HUELLA, laser_x=LASER_X)         # la huella anterior no lo veía
+    assert ciclo_con(viejo, 0.0, 0.5, [(-0.22, -0.12)])[1] == 0.5
+
+
+@pytest.mark.parametrize("malo", ["[[0, 0], [1, 1]]", "[[0, 0], [1, 1], [2]]", "nada", "[[0, 0], [1, 1], [2, 2]", "[[a, 0]]"])
+def test_footprint_invalido_no_arranca(malo):
+    with pytest.raises(ValueError):
+        parsear_huella(malo)
+
+
+def test_footprint_vacio_es_sin_huella():
+    assert parsear_huella("") is None

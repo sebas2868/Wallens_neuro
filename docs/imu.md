@@ -23,6 +23,13 @@ Descarta bloques con el cuaternión sin norma 1 (la lectura corrupta de 0xFF) y 
 El lanzamiento lo fija al núcleo 3 (`taskset -c 3`) y el servicio deja el resto en los núcleos 0-2.
 `config/bno055.yaml` queda para volver al paquete Python (`ros2 run bno055 bno055 --ros-args --params-file ...`).
 
+**Parámetro `lectura`.** `giro` (por defecto) lee cada ciclo solo 6 bytes (0x14..0x19, giroscopio): el EKF solo usa la
+velocidad angular z. Publica `orientation` y `linear_acceleration` en cero con `covariance[0] = -1` (REP-145: no
+disponibles) y descarta la lectura si algún eje supera `max_rate` (5 rad/s; el robot no pasa de 1). `completa` lee el
+bloque de 26 bytes con chequeo de norma del cuaternión. Los scripts de `scripts/odometria/` que leen el yaw del IMU
+(`giro-imu.py`, `giro-ekf.py`, `giro-360.py`, `giro180-avance1m.py`) necesitan `lectura: completa`. Cualquier otro
+valor aborta el nodo al arrancar.
+
 Acelerómetro sin calibrar a propósito: en IMUPLUS el yaw sale del giroscopio, que llega solo a 3. El chequeo de
 arranque (`scripts/chequeo-arranque.py`) exige solo el giroscopio.
 
@@ -44,6 +51,15 @@ pines (GPIO 2 y 3, pines 3 y 5), que sigue siendo `/dev/i2c-1`; no cambia el cab
 atómica, y deja el overlay al final porque los `dtparam` de la base deben ir antes de cualquier `dtoverlay=`.
 Resultado medido: 0 fallos en 7600 ciclos (5 min) y 0 picos en ventanas de 30 s con el driver ROS y `wallens_power`.
 `scripts/odometria/imu-directo.py` repite esa medición leyendo el chip sin ROS (parar antes `wallens_imu`, que va dentro del servicio: `sudo systemctl stop wallens`).
+
+`i2c_gpio_delay_us=3` (antes 10): el IMU pasó de 17.8 % a 10.3 % de un núcleo (el bus por software gasta CPU en
+kernel por cada byte), con 20 669 lecturas en 5 min sin errores de I²C, sin bloques `0xFF` ni de norma mala.
+
+Filtrar en vez de usar bus por software NO sirve (probado 2026-11-01 con `scripts/prueba-i2c-hardware.sh` y
+`scripts/odometria/imu-bus.py`, 5 min a 100 kHz): 129 lecturas malas de 20 316 (0.63 %), de ellas 83 pasan el filtro de
+norma del driver. Son un solo bit 7 de un byte invertido (p. ej. cuaternión `fb3f` → `fbbf`: cambia el signo de `w` y la
+norma sigue en 1.0). Un filtro de salto atraparía los errores grandes, pero los del byte bajo del giro (±0.14 rad/s)
+se confunden con movimiento real. Por eso se mantiene el bus por software.
 
 `scripts/prueba-i2c-gpio.sh` carga el bus por software solo en ejecución (sin tocar `config.txt`; reiniciar lo deshace).
 

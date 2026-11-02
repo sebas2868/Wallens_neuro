@@ -23,7 +23,7 @@ slam_toolbox:
     map_update_interval: 5.0            # s entre /map publicados (redibujar el mapa entero es lo caro)
     resolution: 0.05                    # m por celda; el launch lo cambia con resolucion:=
     min_laser_range: 0.12               # descarta reflejos del propio chasis
-    max_laser_range: 8.0                # una habitación; menos celdas que recorrer por scan que con los 12 m del LD19
+    max_laser_range: 6.0                # el LD19 es ruidoso lejos; menos celdas por scan y menos puntos falsos
     minimum_time_interval: 0.5          # s mínimos entre scans procesados
     transform_timeout: 0.2
     tf_buffer_duration: 30.0
@@ -32,8 +32,8 @@ slam_toolbox:
 
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.30       # m: a 0.10 m/s es un scan cada ~3 s en línea recta
-    minimum_travel_heading: 0.35        # rad (20°): en los giros el scan matching corrige el patinaje
+    minimum_travel_distance: 0.20       # m: a 0.19 m/s un scan cada ~1 s; más scans = más votos para borrar lo que se movió
+    minimum_travel_heading: 0.25        # rad (~14°): en los giros el scan matching corrige el patinaje
     check_min_dist_and_heading_precisely: false
     scan_buffer_size: 10
     scan_buffer_maximum_scan_distance: 8.0
@@ -65,5 +65,5 @@ slam_toolbox:
     minimum_angle_penalty: 0.9
     minimum_distance_penalty: 0.5
     use_response_expansion: true
-    min_pass_through: 2
-    occupancy_threshold: 0.1
+    min_pass_through: 3                 # rayos mínimos por celda antes de decidir si está ocupada
+    occupancy_threshold: 0.3            # ocupada si >=30 % de los rayos la tocan: lo que se movió se borra al verlo vacío

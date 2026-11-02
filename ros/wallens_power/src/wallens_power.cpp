@@ -69,9 +69,11 @@ class Ina226 {
   int direccion_ = 0;
 };
 
+namespace wallens_power {
+
 class WallensPower : public rclcpp::Node {
  public:
-  WallensPower() : Node("wallens_power") {
+  explicit WallensPower(const rclcpp::NodeOptions& options) : Node("wallens_power", options) {
     const int bus = declare_parameter("i2c_bus", 1);
     const int direccion = declare_parameter("i2c_address", 0x40);
     const double shunt = declare_parameter("shunt_ohms", 0.002);
@@ -161,15 +163,7 @@ class WallensPower : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
-int main(int argc, char** argv) {
-  rclcpp::init(argc, argv);
-  int codigo = 0;
-  try {
-    rclcpp::spin(std::make_shared<WallensPower>());
-  } catch (const std::exception& e) {
-    RCLCPP_FATAL(rclcpp::get_logger("wallens_power"), "%s", e.what());
-    codigo = 1;
-  }
-  rclcpp::shutdown();
-  return codigo;
-}
+}  // namespace wallens_power
+
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(wallens_power::WallensPower)

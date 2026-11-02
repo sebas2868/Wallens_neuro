@@ -57,7 +57,7 @@ Cada dispositivo tendrá `docs/<dispositivo>.md` y un `scripts/test-<dispositivo
 | Freno LiDAR | a 30 cm, verificado con un obstáculo |
 | Arranque | servicio systemd con chequeo previo; ver [docs/sistema.md](docs/sistema.md) |
 | Tornillo sin fin (ID 3) | recorrido calibrado, ver [docs/tornillo.md](docs/tornillo.md) |
-| Gripper (ID 5) | `scripts/test-gripper.py` con apriete progresivo; sin nodo ROS |
+| Gripper (ID 5) | `scripts/test-gripper.py` con apriete progresivo; módulo `scripts/brazo/` (baja, agarra y sube) con pruebas por etapas en `scripts/prueba-brazo.py`, ver [docs/gripper-plan.md](docs/gripper-plan.md); sin nodo ROS |
 | Navegación | rutas de prueba en curso, ver [docs/navegacion.md](docs/navegacion.md); falta SLAM/Nav2 |
 
 Pendiente: IP fija (reserva DHCP por MAC con TI), descubrimiento ROS 2 sin multicast para PC↔Pi, imagen de respaldo de la SD,

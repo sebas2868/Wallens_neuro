@@ -1,4 +1,7 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import UnlessCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -21,12 +24,13 @@ def generate_launch_description():
       respawn_delay=2.0)
 
   # TF base_link -> base_laser. base_link está en el centro del eje de las ruedas, a su altura (36.25 mm
-  # sobre el suelo). LiDAR medido: x 108 mm, z 163 mm sobre el suelo (163 - 36.25 = 126.75 mm). El cero del LiDAR apunta a la izquierda
+  # sobre el suelo). LiDAR medido: centro de giro a x 89 mm, z 163 mm sobre el suelo (163 - 36.25 = 126.75 mm). El cero del LiDAR apunta a la izquierda
   # del robot (objeto de frente medido a 90 grados), así que yaw = -90 grados (-1.5708 rad).
   tf = Node(
       package='tf2_ros',
       executable='static_transform_publisher',
       name='base_link_to_base_laser',
-      arguments=['0.108', '0', '0.12675', '-1.5708', '0', '0', 'base_link', 'base_laser'])
+      condition=UnlessCondition(LaunchConfiguration('en_contenedor')),   # en el contenedor wallens_base si es true
+      arguments=['0.089', '0', '0.12675', '-1.5708', '0', '0', 'base_link', 'base_laser'])
 
-  return LaunchDescription([lidar, tf])
+  return LaunchDescription([DeclareLaunchArgument('en_contenedor', default_value='false'), lidar, tf])

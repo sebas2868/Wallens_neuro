@@ -4,6 +4,8 @@
 // Publica (mismos nombres que el driver anterior, para el EKF y los scripts):
 //   bno055/imu          sensor_msgs/Imu  orientación (cuaternión), velocidad angular (rad/s), aceleración lineal (m/s²)
 //   bno055/calib_status std_msgs/String  JSON {"sys":0-3,"gyro":0-3,"accel":0-3,"mag":0-3}
+// Parámetro `lectura`: "completa" lee el bloque de 26 bytes; "giro" (por defecto) lee solo los 6 del giroscopio y publica
+// orientación y aceleración como no disponibles (covarianza[0] = -1, REP-145).
 // No resetea el chip al arrancar (conserva la calibración). Si el chip pierde el modo, lo vuelve a configurar.
 #include <fcntl.h>
 #include <linux/i2c-dev.h>
@@ -32,6 +34,7 @@ constexpr uint8_t CHIP_ID = 0xA0, MODO_CONFIG = 0x00;
 constexpr uint8_t UNIDADES = 0x82;          // aceleración m/s², giroscopio rad/s, Euler en grados
 constexpr size_t LARGO_BLOQUE = 26;         // 0x14..0x2D: gyr(6) euler(6) quat(8) lia(6)
 constexpr double LSB_CUATERNION = 16384.0, LSB_GIRO = 900.0, LSB_ACEL = 100.0;
+constexpr size_t LARGO_GIRO = 6;            // 0x14..0x19: solo el giroscopio
 constexpr int FALLOS_REINICIO = 30;         // lecturas fallidas seguidas antes de reconfigurar el chip
 
 // Remapeo de ejes (AXIS_MAP_CONFIG, AXIS_MAP_SIGN) según la hoja de datos, secc. 3.4
@@ -40,12 +43,22 @@ const std::map<std::string, std::array<uint8_t, 2>> PLACEMENTS = {
     {"P4", {0x24, 0x03}}, {"P5", {0x21, 0x01}}, {"P6", {0x21, 0x07}}, {"P7", {0x24, 0x05}}};
 
 int16_t i16(const uint8_t* p) { return static_cast<int16_t>(p[0] | (p[1] << 8)); }
+// Convierte los 6 bytes del giroscopio a rad/s; false si algún eje supera max_rate (bloque corrupto)
+bool giro_valido(const uint8_t* b, double max_rate, double w[3]) {
+  for (int i = 0; i < 3; ++i) {
+    w[i] = i16(b + 2 * i) / LSB_GIRO;
+    if (std::fabs(w[i]) > max_rate) return false;
+  }
+  return true;
+}
 void dormir_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 }  // namespace
 
+namespace wallens_imu {
+
 class WallensImu : public rclcpp::Node {
  public:
-  WallensImu() : Node("wallens_imu") {
+  explicit WallensImu(const rclcpp::NodeOptions& options) : Node("wallens_imu", options) {
     dispositivo_ = declare_parameter("i2c_device", "/dev/i2c-1");
     direccion_ = static_cast<uint8_t>(declare_parameter("i2c_address", 0x28));
     const double rate = declare_parameter("rate_hz", 30.0);
@@ -53,7 +66,11 @@ class WallensImu : public rclcpp::Node {
     modo_ = static_cast<uint8_t>(declare_parameter("operation_mode", 0x08));
     placement_ = declare_parameter("placement_axis_remap", "P6");
     const double calib_rate = declare_parameter("calib_status_rate_hz", 1.0);
+    lectura_ = declare_parameter("lectura", "giro");
+    max_rate_ = declare_parameter("max_rate", 5.0);
     if (!PLACEMENTS.count(placement_)) throw std::runtime_error("placement_axis_remap desconocido: " + placement_);
+    if (lectura_ != "completa" && lectura_ != "giro")
+      throw std::runtime_error("lectura debe ser \"completa\" o \"giro\", no \"" + lectura_ + "\"");
 
     fd_ = ::open(dispositivo_.c_str(), O_RDWR);
     if (fd_ < 0) throw std::runtime_error("No pude abrir " + dispositivo_ + ": " + std::strerror(errno));
@@ -63,8 +80,8 @@ class WallensImu : public rclcpp::Node {
     pub_calib_ = create_publisher<std_msgs::msg::String>("bno055/calib_status", 10);
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this] { ciclo(); });
     timer_calib_ = create_wall_timer(std::chrono::duration<double>(1.0 / calib_rate), [this] { calibracion(); });
-    RCLCPP_INFO(get_logger(), "BNO055 en %s (0x%02x), modo 0x%02x, placement %s, %.0f Hz", dispositivo_.c_str(),
-                direccion_, modo_, placement_.c_str(), rate);
+    RCLCPP_INFO(get_logger(), "BNO055 en %s (0x%02x), modo 0x%02x, placement %s, lectura %s, %.0f Hz",
+                dispositivo_.c_str(), direccion_, modo_, placement_.c_str(), lectura_.c_str(), rate);
   }
 
   ~WallensImu() override {
@@ -108,7 +125,27 @@ class WallensImu : public rclcpp::Node {
     dormir_ms(30);
   }
 
+  void ciclo_giro() {
+    uint8_t b[LARGO_GIRO];
+    if (!leer(REG_GYR, b, LARGO_GIRO)) return registrar_fallo("error de I2C");
+    double w[3];
+    if (!giro_valido(b, max_rate_, w)) return registrar_fallo("velocidad angular fuera de rango");
+    fallos_ = 0;
+
+    sensor_msgs::msg::Imu m;
+    m.header.stamp = now();
+    m.header.frame_id = frame_;
+    m.angular_velocity.x = w[0];
+    m.angular_velocity.y = w[1];
+    m.angular_velocity.z = w[2];
+    m.orientation_covariance[0] = -1;           // orientación y aceleración no disponibles (REP-145)
+    m.linear_acceleration_covariance[0] = -1;
+    m.angular_velocity_covariance = {0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04};
+    pub_imu_->publish(m);
+  }
+
   void ciclo() {
+    if (lectura_ == "giro") return ciclo_giro();
     uint8_t b[LARGO_BLOQUE];
     if (!leer(REG_GYR, b, LARGO_BLOQUE)) return registrar_fallo("error de I2C");
     // Un bloque corrupto (todo 0xFF o ceros) o con el cuaternión sin norma 1 se descarta
@@ -165,7 +202,8 @@ class WallensImu : public rclcpp::Node {
     }
   }
 
-  std::string dispositivo_, frame_, placement_;
+  std::string dispositivo_, frame_, placement_, lectura_;
+  double max_rate_;
   uint8_t direccion_, modo_;
   int fd_ = -1, fallos_ = 0;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_imu_;
@@ -173,15 +211,7 @@ class WallensImu : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr timer_, timer_calib_;
 };
 
-int main(int argc, char** argv) {
-  rclcpp::init(argc, argv);
-  try {
-    rclcpp::spin(std::make_shared<WallensImu>());
-  } catch (const std::exception& e) {
-    RCLCPP_FATAL(rclcpp::get_logger("wallens_imu"), "%s", e.what());
-    rclcpp::shutdown();
-    return 1;
-  }
-  rclcpp::shutdown();
-  return 0;
-}
+}  // namespace wallens_imu
+
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(wallens_imu::WallensImu)

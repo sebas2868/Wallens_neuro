@@ -3,7 +3,9 @@ Rutas: avance (1 m adelante y 1 m atrás), ida-vuelta (2 m, giro de 180°, 2 m, 
 de 90° a la izquierda]), giro90 (4 giros de 90°), giro180 (2 giros de 180°). Todas terminan donde empezaron y mirando
 igual: se marca el suelo antes y se mide con cinta tras las corridas. Éxito: < 3 cm y < 2°.
 Se copia a la Pi y se corre con ROS 2 cargado y el servicio wallens en marcha. MUEVE el robot: espacio libre y mano cerca.
-Uso: python3 rutas.py <ruta> [corridas]"""
+Uso: python3 rutas.py <ruta> [corridas] [--pausa]
+--pausa: con el freno activo el robot espera (hasta ESPERA_MAX s) y retoma al quitar el obstáculo, en vez de abortar.
+cuadrado90: 4 × [90 cm + giro de 90° a la derecha]."""
 import math, sys, time, rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
@@ -12,8 +14,10 @@ from std_msgs.msg import Bool
 from rclpy.qos import QoSProfile
 from rclpy.signals import SignalHandlerOptions
 
-RUTA = sys.argv[1] if len(sys.argv) > 1 else "avance"
-CORRIDAS = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+PAUSA = "--pausa" in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != "--pausa"]
+RUTA = ARGS[0] if ARGS else "avance"
+CORRIDAS = int(ARGS[1]) if len(ARGS) > 1 else 1
 ESCALA = 1.2             # sobre la velocidad base 0.10 m/s y 0.3 rad/s (la rampa de frenado crece con ella)
 V, W = 0.10 * ESCALA, 0.3 * ESCALA   # m/s, rad/s
 ANTICIPO_AVANCE = 0.02 * ESCALA      # m antes del objetivo en que se manda frenar (la rampa recorre unos cm más)
@@ -21,12 +25,14 @@ ANTICIPO_GIRO = 3.0 * ESCALA         # grados
 K_RUMBO, W_RUMBO_MAX = 1.0, 0.2   # corrección del rumbo mientras avanza
 TIEMPO_MAX = 40          # s por tramo
 BLOQUEO_MAX = 1.5        # s seguidos con el freno activo antes de abortar la ruta
+ESPERA_MAX = 120         # s totales esperando que quiten el obstáculo (solo con --pausa)
 EDAD_MAX_ODOM = 0.3      # s sin /odometry/filtered: se aborta (el EKF murió)
 
 rclpy.init(signal_handler_options=SignalHandlerOptions.NO)   # Ctrl+C llega como KeyboardInterrupt y aún se puede frenar
 n = Node("rutas")
 pub = n.create_publisher(Twist, "cmd_vel", 10)
 d = {"freno": False, "t_freno": 0.0}
+espera = {"t0": None}
 
 
 def yaw(q):
@@ -97,7 +103,20 @@ def avanzar(dist):
         if time.time() - inicio > TIEMPO_MAX:
             raise Abortar("tiempo agotado avanzando")
         revisar_odom()
-        bloqueo = revisar(bloqueo)
+        if PAUSA and d["freno"]:
+            if not espera["t0"]:
+                espera["t0"] = time.time()
+                print("Obstáculo: robot detenido, esperando que lo quiten...", flush=True)
+            if time.time() - espera["t0"] > ESPERA_MAX:
+                raise Abortar("el obstáculo no se quitó a tiempo")
+            enviar(0.0, 0.0)
+            rclpy.spin_once(n, timeout_sec=0.05)
+            inicio += 0.05               # la espera no cuenta para TIEMPO_MAX
+            continue
+        if espera["t0"]:
+            print(f"Obstáculo retirado tras {time.time() - espera['t0']:.1f} s: retoma.", flush=True)
+            espera["t0"] = None
+        bloqueo = None if PAUSA else revisar(bloqueo)
         w = max(-W_RUMBO_MAX, min(W_RUMBO_MAX, K_RUMBO * girar_ang(d["th"], th0)))
         enviar(signo * V, w)             # w>0 gira a la izquierda también yendo hacia atrás
         rclpy.spin_once(n, timeout_sec=0.05)
@@ -124,6 +143,7 @@ RUTAS = {
     "avance": [("avanzar", 1.0), ("avanzar", -1.0)],
     "ida-vuelta": [("avanzar", 2.0), ("girar", 180), ("avanzar", 2.0), ("girar", 180)],
     "cuadrado": [("avanzar", 1.0), ("girar", 90)] * 4,
+    "cuadrado90": [("avanzar", 0.9), ("girar", -90)] * 4,
     "giro90": [("girar", 90)] * 4,
     "giro180": [("girar", 180)] * 2,
 }
