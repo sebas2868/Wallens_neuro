@@ -150,9 +150,14 @@ limpios porque las frutas están demasiado juntas.
 
 ### Probar en el robot
 
+Por etapas, de la más corta a la completa; cada una prueba una pieza nueva y el launch queda corriendo entre ellas:
+
 ```
-~/wallens/scripts/probar-mision.sh            # completa: limón 1.2 m al frente, lo deja donde arrancó el robot
-~/wallens/scripts/probar-mision.sh VERIFICAR  # solo hasta agarrarlo
+~/wallens/scripts/probar-mision.sh agarre          # limón 33 cm detrás, en el eje: cam_garra + gripper (~20 s)
+X_AGARRE=… Y_AGARRE=… ~/wallens/scripts/probar-mision.sh agarre   # repetir con lo que imprimió VERIFICAR
+~/wallens/scripts/probar-mision.sh acercar         # limón 1.2 m al frente: cam_frutas, acercarse y girar 180°
+~/wallens/scripts/probar-mision.sh hasta-agarrar   # lo anterior y agarrarlo
+~/wallens/scripts/probar-mision.sh                 # completa: lo deja donde arrancó el robot y se aparta
 ```
 
 Para el servicio `wallens` (pide sudo), lanza `mision.launch.py` con `depuracion:=true` si no corre, pasa el
