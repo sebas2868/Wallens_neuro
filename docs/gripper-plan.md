@@ -36,6 +36,16 @@ se escribe una meta nueva (`cerrar_y_apretar()` ya lo hace). Está en `Brazo.abr
 - **Pendiente de verificar en el robot:** `scripts/diagnostico-pinza.py` compara la estrategia A (como antes), B, C (B con
   corriente baja de mantenimiento) y D (torque apagado) midiendo el pico a pico, las inversiones de sentido y la corriente.
   Si B no basta, la C es el siguiente paso.
+- **2026-11-02:** el usuario vio que con B la pinza abierta sigue oscilando. Se adopta la **C**: tras congelar la meta,
+  `abrir()` baja la corriente a `corriente_reposo_p` = 30 (~80 mA); cualquier movimiento nuevo vuelve a escribir su corriente.
+  Se verifica en la prueba de la fase G (`scripts/prueba-pinza-frutas.py`, pregunta de G1).
+
+## Cierre medido (2026-11-02)
+
+El limón no llegaba a tocar los dedos antes de `CERRADA - MARGEN_PINZA` (3791). `Brazo.medir_cierre()` cierra en vacío a
+`vel_agarre` con corriente 80 (~215 mA) hasta que los dedos se detienen (máximo `CERRADA + 150`) y usa esa posición como
+tope de apriete. Un contacto a menos de 15 ticks de ella es "dedos juntos" (sin objeto). Si se detiene a más de 240 ticks
+antes de `CERRADA`, aborta (algo entre los dedos). Lo usa la fase G; el nodo del brazo lo adoptará en la fase 4.
 
 ## Política de abortos
 

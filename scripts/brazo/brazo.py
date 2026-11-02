@@ -81,6 +81,10 @@ class Config:
     limite_corriente_p: int = 690    # tope de EEPROM (~1860 mA)
     umbral_contacto: int = 50        # corriente que, con la pinza detenida, indica contacto
     corriente_apriete: int = 625     # tras el contacto sigue cerrando hasta esta corriente
+    corriente_reposo_p: int = 30     # tras abrir (~80 mA): con la corriente de apertura la pinza oscilaba por el juego
+    corriente_cierre: int = 80       # medir_cierre: cierra en vacío con poca fuerza (~215 mA) hasta juntar los dedos
+    cierre_extra: int = 150          # ticks más allá de CERRADA que medir_cierre puede buscar
+    margen_dedos: int = 15           # contacto a menos de esto del cierre medido = dedos juntos, no un objeto
     tiempo_apriete: float = 6        # s máximos apretando después del contacto
     paso_apriete: int = 2            # ticks que avanza la meta por lectura
     fraccion_desliz: float = 0.5     # corriente bajo esta fracción del apriete, ya apretado = se escapa
@@ -134,7 +138,8 @@ class Brazo:
         self.recorrido = abs(cal["abajo"] - cal["arriba"])
         util = (CERRADA - ABIERTA - 2 * MARGEN_PINZA) * 0.9        # se reduce un 10 % el rango útil
         self.pos_abrir = round((ABIERTA + CERRADA) / 2 - util / 2)
-        self.tope_apriete = CERRADA - MARGEN_PINZA
+        self.tope_apriete = CERRADA - MARGEN_PINZA                  # hasta medir_cierre()
+        self.cerrada = None                                         # dónde se juntan los dedos, medido
         self.abajo = self.arriba = self.agarre_t = None            # None = sin calibrar
         self.ultimo_tramo = None
 
@@ -223,7 +228,7 @@ class Brazo:
         ini_p = self._pos(PINZA)
         ini_t = self._pos(TORNILLO) if TORNILLO in self.ids else None
         self.log(f"Motores OK. Tornillo en {ini_t}, pinza en {ini_p}")
-        if not ABIERTA - 100 <= ini_p <= CERRADA + 100:
+        if not ABIERTA - 100 <= ini_p <= CERRADA + self.cfg.cierre_extra + 20:
             raise AbortoDuro(f"Posición inicial de la pinza {ini_p} fuera del recorrido conocido: revisar a mano")
         c = self.cfg
         for i in self.ids:
@@ -233,7 +238,7 @@ class Brazo:
             self._escribir(TORNILLO, LIMITE_CORRIENTE, 2, c.limite_corriente_t)
         self._escribir(PINZA, LIMITE_CORRIENTE, 2, c.limite_corriente_p)
         self._escribir(PINZA, LIM_POS_MIN, 4, self.pos_abrir)
-        self._escribir(PINZA, LIM_POS_MAX, 4, self.tope_apriete)
+        self._escribir(PINZA, LIM_POS_MAX, 4, CERRADA + c.cierre_extra)   # en modo 5 el motor lo ignora; tope real: software
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_pinza)    # la velocidad primero: la aceleración no puede superarla
         self._escribir(PINZA, ACELERACION, 4, c.acel_pinza)
         if TORNILLO in self.ids:
@@ -302,6 +307,39 @@ class Brazo:
         posición real el error es cero. Al cerrar se escribe una meta nueva."""
         self.ir_pinza(self.pos_abrir)
         self._escribir(PINZA, POS_META, 4, self._pos(PINZA))
+        if self.cfg.corriente_reposo_p:
+            # estrategia C de gripper-plan.md: con la meta congelada seguía oscilando; con poca corriente no empuja el juego
+            self._escribir(PINZA, CORRIENTE_META, 2, self.cfg.corriente_reposo_p)
+
+    def medir_cierre(self):
+        """Cierra en vacío, despacio y con poca corriente, hasta que los dedos se juntan. Desde ahí el apriete puede
+        llegar hasta ese punto (frutas chicas como el limón no tocaban antes de CERRADA - MARGEN_PINZA) y un contacto
+        a menos de `margen_dedos` de él es "dedos juntos", no un objeto. Deja la pinza cerrada; devuelve la posición."""
+        c = self.cfg
+        limite = CERRADA + c.cierre_extra
+        self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
+        self._escribir(PINZA, CORRIENTE_META, 2, c.corriente_cierre)
+        self._escribir(PINZA, POS_META, 4, limite)
+        historial, inicio = [], self.reloj.ahora()
+        while True:
+            self._dormir(c.periodo)
+            self._vigilar()
+            actual, cor = self._pos(PINZA), self._corriente(PINZA)
+            historial = (historial + [(actual, abs(cor))])[-3:]
+            if (len(historial) == 3 and all(x[1] > c.umbral_contacto for x in historial)
+                    and max(x[0] for x in historial) - min(x[0] for x in historial) <= 3):
+                break
+            if abs(actual - limite) <= c.llegada_p:
+                raise AbortoSuave(f"La pinza llegó a {limite} sin juntar los dedos: revisar a mano")
+            if self.reloj.ahora() - inicio > c.tiempo_max_p:
+                raise AbortoSuave(f"La pinza no juntó los dedos en {c.tiempo_max_p} s")
+        self._escribir(PINZA, POS_META, 4, actual)      # deja de empujar
+        if actual < CERRADA - 4 * MARGEN_PINZA:
+            raise AbortoSuave(f"Los dedos se detuvieron en {actual}, lejos del cierre medido ({CERRADA}): "
+                              "¿algo entre los dedos?")
+        self.cerrada = self.tope_apriete = actual
+        self.log(f"    los dedos se juntan en {actual} (antes el cierre llegaba hasta {CERRADA - MARGEN_PINZA})")
+        return actual
 
     def ir_pinza(self, destino):
         """Mueve el gripper a `destino` en vacío (velocidad y corriente de apertura) vigilando corriente y tiempo."""
@@ -348,6 +386,10 @@ class Brazo:
             if self.reloj.ahora() - inicio > c.tiempo_max_p:
                 raise AbortoSuave(f"La pinza no cerró ni hizo contacto en {c.tiempo_max_p} s")
 
+        if self.cerrada is not None and contacto >= self.cerrada - c.margen_dedos:
+            self._escribir(PINZA, POS_META, 4, contacto)
+            self.log(f"    los dedos se juntaron en {contacto}: no hay objeto")
+            return None
         self.log(f"    contacto en {contacto}: apretando hasta corriente {c.corriente_apriete}")
         meta, fuertes, en_tope = contacto, 0, 0
         self._escribir(PINZA, POS_META, 4, meta)    # deja de empujar hacia el tope; desde aquí sube de a poco

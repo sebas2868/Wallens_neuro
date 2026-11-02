@@ -174,6 +174,32 @@ class TestGripper(Base):
         self.assertAlmostEqual(self.bus.pinza.regs[116], self.bus.pinza.pos, delta=1)   # meta = posición real
         self.assertNotEqual(self.bus.pinza.regs[116], b.pos_abrir)
 
+    def test_abrir_deja_poca_corriente_para_que_no_oscile(self):
+        b = self.listo(calibrado=False)
+        b.abrir()
+        self.assertEqual(self.bus.pinza.regs[102], Config().corriente_reposo_p)
+        b.ir_pinza(b.pos_abrir + 200)                  # moverse vuelve a la corriente de apertura
+        self.assertEqual(self.bus.pinza.regs[102], Config().corriente_pinza)
+
+    def test_medir_cierre_y_fruta_chica(self):
+        b = self.listo(calibrado=False)
+        b.abrir()
+        cerrada = b.medir_cierre()
+        self.assertAlmostEqual(cerrada, 3900, delta=5)     # el tope de los dedos del bus falso
+        self.assertEqual(b.tope_apriete, cerrada)
+        b.abrir()
+        self.assertIsNone(b.cerrar_y_apretar())            # en vacío: dedos juntos, no un objeto
+        b.abrir()
+        self.bus.pinza.objeto = {"contacto": 3820, "rigidez": 20}  # más chica que el cierre viejo (3791)
+        self.assertIsNotNone(b.cerrar_y_apretar())
+
+    def test_medir_cierre_con_algo_entre_los_dedos_aborta(self):
+        b = self.listo(calibrado=False)
+        b.abrir()
+        self.bus.pinza.objeto = {"contacto": 3300, "rigidez": 8}
+        with self.assertRaises(AbortoSuave):
+            b.medir_cierre()
+
     def test_abrir_y_cerrar_en_vacio(self):
         b = self.listo(calibrado=False)
         b.abrir()

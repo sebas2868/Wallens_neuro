@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fase G del plan de la misión (docs/mision-frutas-plan.md): el gripper (ID 5) con las frutas reales, sin tocar el
 tornillo (ID 3, roto). En una sola corrida:
-  G1  abre y cierra en vacío 2 veces: el cierre tiene que decir "sin contacto".
+  G0  cierra en vacío con poca fuerza y mide dónde se juntan los dedos: ese es el nuevo límite de cierre (el limón es chico).
+  G1  abre y cierra en vacío 2 veces: el cierre tiene que decir "sin contacto"/"dedos juntos"; abierta no debe oscilar.
   G3  por cada fruta, cierra con corriente de apriete creciente hasta que la sostiene firme (tú lo dices).
   G4  sostiene 5 s vigilando que no resbale.
   G5  la suelta.
@@ -61,11 +62,14 @@ def sostener(b, fuerza, segundos):
     return False, minima
 
 
-def g1(b):
+def g1(b, preguntar=preguntar):
     for i in (1, 2):
         b.abrir()
         if b.cerrar_y_apretar() is not None:
             return f"ciclo {i}: cerró en vacío y dijo que agarró algo"
+    b.abrir()
+    if preguntar(b, "  Mira la pinza abierta 3 s. ¿Quedó quieta, sin oscilar? (s/n) ") != "s":
+        return "la pinza abierta oscila"
     return None
 
 
@@ -111,6 +115,9 @@ def main():
         b.preparar()
         input("FASE G (solo el gripper). Mano en el interruptor, dedos libres. Enter para mover (Ctrl+C cancela)... ")
         b.energizar()
+        b.abrir()
+        resultados["cerrada"] = b.medir_cierre()
+        print(f"\nG0 los dedos se juntan en {resultados['cerrada']}")
         falla = g1(b)
         print(f"\nG1 abrir/cerrar en vacío: {'FALLA: ' + falla if falla else 'PASA'}")
         resultados["g1"] = falla or "pasa"
