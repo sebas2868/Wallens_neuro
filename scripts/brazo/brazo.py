@@ -38,6 +38,10 @@ class AbortoDuro(Aborto):
     pass
 
 
+class SinCero(Aborto):
+    """No hay cero vigente y el homing está desactivado: se rechaza la orden, sin tratarla como anomalía."""
+
+
 @dataclass
 class Config:
     periodo: float = 0.05            # s entre lecturas de vigilancia mientras algo se mueve
@@ -120,6 +124,8 @@ def con_signo(v, bits):
 class Brazo:
     def __init__(self, bus, cal, cfg=None, reloj=None, cero=None, log=print, usar_tornillo=True):
         self._muestra = {}                                  # pos y corriente del último bloque leído por _vigilar
+        self.ultima_muestra = {}                            # id -> {pos, cor, voltaje, temp} de la última vigilancia
+        self._peticion = None                               # ("suave"|"duro", motivo) pedida desde otro hilo
         self.ids = (TORNILLO, PINZA) if usar_tornillo else (PINZA,)     # sin tornillo solo se toca el gripper
         self.bus, self.cfg, self.reloj, self.log = bus, cfg or Config(), reloj or Reloj(), log
         self.cero = cero or Cero()
@@ -166,6 +172,9 @@ class Brazo:
         hardware) y deja la posición y la corriente para que `_pos` y `_corriente` no vuelvan al bus en esta iteración:
         con el bus compartido con las ruedas sobran pocos ms por ciclo (docs/brazo-bus-plan.md)."""
         self._muestra = {}
+        peticion, self._peticion = self._peticion, None
+        if peticion:
+            raise (AbortoSuave if peticion[0] == "suave" else AbortoDuro)(peticion[1])
         for i in self.ids:
             try:
                 datos, estado = self.bus.leer_bloque(i, CORRIENTE_ACTUAL, BLOQUE)
@@ -187,6 +196,7 @@ class Brazo:
             if not self.cfg.voltaje[0] <= v <= self.cfg.voltaje[1]:
                 raise AbortoDuro(f"ID {i}: voltaje {v} V fuera de {self.cfg.voltaje[0]}-{self.cfg.voltaje[1]}")
             self._muestra[i] = {"pos": pos, "cor": cor}
+            self.ultima_muestra[i] = {"pos": pos, "cor": cor, "voltaje": v, "temp": t}
 
     def _pausa(self, segundos):
         """Espera vigilando, para que el watchdog no tome la espera por un corte."""
@@ -240,6 +250,15 @@ class Brazo:
     def _watchdog(self, valor):
         for i in self.ids:
             self._escribir(i, WATCHDOG, 1, valor)
+
+    def solicitar_aborto(self, tipo, motivo):
+        """Desde otro hilo (/parada, batería): la siguiente vigilancia lanza AbortoSuave ("suave") o AbortoDuro
+        ("duro") en el hilo que mueve el brazo. Las esperas y los movimientos vigilan cada `periodo`."""
+        self._peticion = (tipo, motivo)
+
+    def mantener(self):
+        """Mantiene vivo el watchdog con el brazo quieto (una vigilancia)."""
+        self._vigilar()
 
     def pausar_watchdog(self):
         """Antes de esperar a una persona sin leer los motores."""
@@ -448,13 +467,16 @@ class Brazo:
         self.agarre_t = abajo - self.signo * self.cfg.altura
         self.log(f"    altura de agarre {self.agarre_t}, espera arriba en {self.arriba}")
 
-    def calibrar(self, forzar=False):
+    def calibrar(self, forzar=False, homing=True):
         """Fija el cero del tornillo. Devuelve "reusada" si la marca del motor y el cero guardado siguen valiendo,
-        o "homing" si hubo que bajar al tope inferior (abre la pinza primero; el tornillo queda 40 ticks sobre él)."""
+        o "homing" si hubo que bajar al tope inferior (abre la pinza primero; el tornillo queda 40 ticks sobre él).
+        Con homing=False, sin cero vigente lanza SinCero y no mueve el tornillo."""
         self.abrir()
         if not forzar and self._cero_vigente():
             self.log("--- Cero reusado (no hubo corte de energía)")
             return "reusada"
+        if not homing:
+            raise SinCero("No hay cero vigente y el homing está desactivado")
         self.log("--- Homing: bajando el tornillo hasta el tope inferior")
         self.abajo = None
         tope = self._buscar_tope_abajo()

@@ -8,6 +8,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/OperacionDxl.msg"
   "msg/ResultadoDxl.msg"
   "msg/DiagnosticoBus.msg"
+  "msg/EstadoBrazo.msg"
+  "action/Recoger.action"
   "srv/TransaccionDxl.srv"
 )
 

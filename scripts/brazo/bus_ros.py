@@ -73,8 +73,11 @@ class TransporteRclpy:
         self._nodo = nodo
         self._cliente = nodo.create_client(TransaccionDxl, "brazo/transaccion")
         self._timeout = timeout
-        if not self._cliente.wait_for_service(timeout_sec=espera_servicio):
+        if espera_servicio is not None and not self._cliente.wait_for_service(timeout_sec=espera_servicio):
             raise ErrorBus("sin bus: no existe el servicio brazo/transaccion (¿el driver corre con brazo_habilitado:=true?)")
+
+    def disponible(self):
+        return self._cliente.service_is_ready()
 
     def __call__(self, operaciones):
         from wallens_interfaces.msg import OperacionDxl
