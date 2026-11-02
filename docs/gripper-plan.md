@@ -47,6 +47,17 @@ El limón no llegaba a tocar los dedos antes de `CERRADA - MARGEN_PINZA` (3791).
 tope de apriete. Un contacto a menos de 15 ticks de ella es "dedos juntos" (sin objeto). Si se detiene a más de 240 ticks
 antes de `CERRADA`, aborta (algo entre los dedos). Lo usa la fase G; el nodo del brazo lo adoptará en la fase 4.
 
+## Sostén y rearme (2026-11-02)
+
+- Tras agarrar, `cerrar_fruta(tipo)` baja la corriente a la de sostén (`SOSTEN_FRUTA`: limón 200, naranja 300, las
+  mínimas firmes de la fase G): sostener con la de apriete dejó el gripper con sobrecarga (registro 70 = 32).
+- `ControlBrazo.ocupado` es "ejecutando una orden". Antes era "cerrojo tomado", y `mantener()` lo toma para vigilar: un
+  `/parada` con el brazo quieto lo congelaba y `brazo/ocupado` frenaba las ruedas a ratos. En reposo una petición de
+  aborto suave se descarta; una dura (batería) se atiende.
+- Orden `rearmar`: saca del congelado abriendo la pinza, solo sin fruta (con fruta, `brazo/soltar` a mano). La usa la
+  misión al empezar.
+- En reposo el nodo vigila cada 0.25 s con el watchdog del motor a 1 s (antes 0.1 s y 0.5 s).
+
 ## Política de abortos
 
 | Anomalía | Tipo | Qué pasa |

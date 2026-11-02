@@ -1,12 +1,14 @@
 """Órdenes del brazo para el nodo ROS, sin ROS: un `ControlBrazo` envuelve a `Brazo` y decide qué se acepta.
 Una orden a la vez (el resto se rechaza como "ocupado"), el brazo quieto sigue vigilado para que no salte el
 watchdog del motor, y las anomalías siguen la política de docs/gripper-plan.md:
-  suave  /parada, atasco, resbalón: congela con torque y se queda `congelado` hasta soltar() (abre y rearma)
-  duro   hardware, voltaje, comunicación, batería crítica: torque off de ambos motores y se invalida el cero"""
+  suave  /parada, atasco, resbalón: congela con torque y se queda `congelado` hasta soltar() o la orden `rearmar`
+  duro   hardware, voltaje, comunicación, batería crítica: torque off de ambos motores y se invalida el cero
+`ocupado` es "ejecutando una orden", no "vigilando": mantener() también toma el cerrojo, pero con el brazo quieto
+/parada no debe congelarlo ni el freno LiDAR parar las ruedas (fallo real del 2026-11-02)."""
 import threading
 from dataclasses import dataclass
 
-from .brazo import Aborto, AbortoDuro, AbortoSuave, SinCero
+from .brazo import CIERRE_MEDIDO, TORNILLO, Aborto, AbortoDuro, AbortoSuave, SinCero
 
 
 @dataclass
@@ -23,7 +25,8 @@ class ControlBrazo:
         self.homing = homing                    # false: solo se reusa un cero vigente (método de cero sin decidir)
         self._al_fase = al_fase
         self.log = log
-        self._cerrojo = threading.Lock()        # una orden a la vez
+        self._cerrojo = threading.Lock()        # una orden a la vez (y mantener() mientras lee)
+        self._en_orden = False                  # una orden en curso: lo que publica brazo/ocupado
         self.energizado = False
         self.congelado = False
         self.objeto = False                     # el último recoger() terminó "agarrado" y no se ha soltado
@@ -35,7 +38,7 @@ class ControlBrazo:
     # --- consulta ---------------------------------------------------------------------------------------
     @property
     def ocupado(self):
-        return self._cerrojo.locked()
+        return self._en_orden
 
     @property
     def calibrado(self):
@@ -60,6 +63,7 @@ class ControlBrazo:
     def _ejecutar(self, nombre, f, *, necesita_calibrado=False, permite_congelado=False, necesita_ruedas=True):
         if not self._cerrojo.acquire(blocking=False):
             return Resultado(False, f"{nombre} rechazada: el brazo está ocupado")
+        self._en_orden = True
         try:
             self.brazo._peticion = None                  # una petición vieja no debe abortar esta orden
             if not self.bateria_ok:
@@ -89,6 +93,7 @@ class ControlBrazo:
                 return self._apagar_duro(f"{nombre}: {type(e).__name__}: {e}")
         finally:
             self.brazo._peticion = None
+            self._en_orden = False
             self._cerrojo.release()
 
     def _asegurar_energizado(self):
@@ -133,6 +138,37 @@ class ControlBrazo:
             return Resultado(True, "gripper abierto")
         return self._ejecutar("soltar", f, permite_congelado=True, necesita_ruedas=False)
 
+    def orden(self, texto):
+        """Órdenes sueltas de la misión (ros/wallens_mision): abrir, soltar, rearmar, cerrar, cerrar:<tipo>, bajar, subir.
+        `valor`: "listo", o "agarrado"/"sin_agarre" al cerrar. Sin tornillo, bajar y subir se rechazan."""
+        nombre, _, tipo = texto.partition(":")
+        if nombre in ("abrir", "soltar", "rearmar"):
+            def f():
+                if nombre == "rearmar":
+                    # una misión nueva rearma un brazo congelado por un fallo anterior, pero solo sin fruta en la pinza
+                    if self.objeto:
+                        return Resultado(False, "rearmar rechazada: lleva una fruta; soltarla a mano (brazo/soltar)")
+                    self.log("REARMADO por la misión: " + ("estaba congelado, " if self.congelado else "") + "abre la pinza")
+                self._fase("abriendo")
+                if self.brazo.cerrada is None:       # sin medir: cerrar los dedos aquí barrería la fruta
+                    self.brazo.usar_cierre(CIERRE_MEDIDO)
+                self.brazo.abrir()
+                self.objeto = self.congelado = False
+                return Resultado(True, "gripper abierto", "listo")
+            return self._ejecutar(texto, f, permite_congelado=nombre != "abrir", necesita_ruedas=False)
+        if nombre == "cerrar":
+            def f():
+                self._fase("cerrando")
+                if self.brazo.cerrada is None:
+                    return Resultado(False, "abrir antes de cerrar: falta medir el cierre de los dedos")
+                r = "agarrado" if self.brazo.cerrar_fruta(tipo or None) is not None else "sin_agarre"
+                self.objeto = r == "agarrado"
+                return Resultado(True, r, r)
+            return self._ejecutar(texto, f)
+        if nombre in ("bajar", "subir"):
+            return Resultado(False, "sin ascensor" if TORNILLO not in self.brazo.ids else f"{nombre}: falta implementar")
+        return Resultado(False, f"orden desconocida: {texto}")
+
     def congelar(self):
         """Parada suave manual: si algo se mueve lo congela en la siguiente vigilancia."""
         if self.ocupado:
@@ -168,7 +204,7 @@ class ControlBrazo:
         self.bateria_ok = False
         if self.ocupado:
             self.brazo.solicitar_aborto("duro", motivo)
-        elif self.energizado and self._cerrojo.acquire(blocking=False):
+        elif self.energizado and self._cerrojo.acquire(timeout=1.0):   # mantener() lo suelta en una lectura
             try:
                 self._apagar_duro(motivo)
             finally:
@@ -182,6 +218,8 @@ class ControlBrazo:
         if not self.energizado or not self._cerrojo.acquire(blocking=False):
             return
         try:
+            if self.brazo._peticion and self.brazo._peticion[0] == "suave":
+                self.brazo._peticion = None         # nada se mueve: no hay que congelar (una dura sí se atiende)
             self.brazo.mantener()
         except Aborto as e:
             if isinstance(e, AbortoSuave):

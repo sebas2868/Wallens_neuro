@@ -3,8 +3,9 @@ Uso (desde scripts/):  python3 -m unittest brazo.test_control -v"""
 import os
 import unittest
 
-from brazo import ControlBrazo, PINZA, TORNILLO
-from brazo.test_brazo import Base, OBJETO
+from brazo import Brazo, Cero, Config, ControlBrazo, PINZA, TORNILLO
+from brazo.brazo import SOSTEN_FRUTA
+from brazo.test_brazo import CAL, Base, OBJETO
 
 
 class BaseControl(Base):
@@ -205,3 +206,116 @@ class TestApagarYSoltar(BaseControl):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOrdenesMision(BaseControl):
+    """Órdenes sueltas de la misión de frutas, sin tornillo (roto): solo el gripper."""
+    def control_pinza(self, quietas=True):
+        self.fases = []
+        b = Brazo(self.bus, CAL, Config(), reloj=self.bus.reloj, cero=Cero(self.ruta_cero), log=lambda *_: None,
+                  usar_tornillo=False)
+        return ControlBrazo(b, ruedas_quietas=lambda: quietas, al_fase=self.fases.append, log=lambda *_: None)
+
+    def test_abrir_usa_el_cierre_medido_sin_cerrar_y_cerrar_agarra_la_fruta(self):
+        c = self.control_pinza()
+        tornillo = dict(self.bus.tornillo.regs)
+        r = c.orden("abrir")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertLess(self.bus.pinza.max_visto, 3000)            # no cerró los dedos para medir
+        self.assertEqual(r.valor, "listo")
+        self.assertIsNotNone(c.brazo.cerrada)
+        self.bus.pinza.objeto = dict(OBJETO)
+        r = c.orden("cerrar:limon")
+        self.assertEqual((r.ok, r.valor), (True, "agarrado"))
+        self.assertTrue(c.objeto)
+        self.assertEqual(self.bus.tornillo.regs, tornillo)        # el tornillo ni se tocó
+        self.assertTrue(c.orden("soltar").ok)
+        self.assertFalse(c.objeto)
+        self.bus.pinza.objeto = None
+        self.assertEqual(c.orden("cerrar").valor, "sin_agarre")   # CERRAR_VACIO
+
+    def test_cerrar_sin_haber_abierto_se_rechaza(self):
+        c = self.control_pinza()
+        self.assertFalse(c.orden("cerrar:naranja").ok)
+
+    def test_cerrar_con_las_ruedas_en_marcha_se_rechaza(self):
+        c = self.control_pinza(quietas=False)
+        self.assertTrue(c.orden("abrir").ok)                       # abrir no pide ruedas quietas
+        self.assertFalse(c.orden("cerrar:limon").ok)
+
+    def test_sin_tornillo_bajar_y_subir_dicen_sin_ascensor(self):
+        c = self.control_pinza()
+        for o in ("bajar", "subir"):
+            r = c.orden(o)
+            self.assertEqual((r.ok, r.mensaje), (False, "sin ascensor"))
+        self.assertFalse(c.orden("bailar").ok)
+
+
+class TestReposo(BaseControl):
+    """Fallo real (2026-11-02): con el brazo quieto, /parada llegó mientras mantener() tenía el cerrojo, se tomó como
+    "ocupado", pidió un aborto suave y la vigilancia siguiente congeló el brazo; la misión nueva ya no arrancaba. Y
+    brazo/ocupado salía true a ratos en reposo: el freno LiDAR paraba las ruedas mientras la misión alineaba."""
+    def control_pinza(self):
+        b = Brazo(self.bus, CAL, Config(), reloj=self.bus.reloj, cero=Cero(self.ruta_cero), log=lambda *_: None,
+                  usar_tornillo=False)
+        return ControlBrazo(b, log=lambda *_: None)
+
+    def test_vigilar_en_reposo_no_cuenta_como_ocupado(self):
+        c = self.control_pinza()
+        self.assertTrue(c.orden("abrir").ok)
+        with c._cerrojo:                                  # mantener() a mitad de su lectura
+            self.assertFalse(c.ocupado)
+
+    def test_parada_con_el_brazo_en_reposo_no_lo_congela(self):
+        c = self.control_pinza()
+        self.assertTrue(c.orden("abrir").ok)
+        with c._cerrojo:
+            c.poner_parada(True)
+        c.mantener()
+        self.assertFalse(c.congelado)
+        c.poner_parada(False)
+        self.assertTrue(c.orden("abrir").ok)
+
+    def test_rearmar_saca_del_congelado_sin_fruta(self):
+        c = self.control_pinza()
+        self.assertTrue(c.orden("abrir").ok)
+        c.congelar()
+        self.assertFalse(c.orden("cerrar").ok)
+        r = c.orden("rearmar")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertFalse(c.congelado)
+        self.assertTrue(c.orden("cerrar").ok)
+
+    def test_rearmar_con_fruta_se_rechaza(self):
+        c = self.control_pinza()
+        self.assertTrue(c.orden("abrir").ok)
+        self.bus.pinza.objeto = dict(OBJETO)
+        self.assertEqual(c.orden("cerrar:limon").valor, "agarrado")
+        c.congelar()
+        r = c.orden("rearmar")
+        self.assertFalse(r.ok)
+        self.assertIn("fruta", r.mensaje)
+        self.assertTrue(c.congelado)
+
+    def test_tras_agarrar_baja_a_la_corriente_de_sosten(self):
+        # fallo 5: sobrecarga (registro 70 = 32) tras sostener la fruta con la corriente de apriete
+        c = self.control_pinza()
+        self.assertTrue(c.orden("abrir").ok)
+        self.bus.pinza.objeto = dict(OBJETO)
+        self.assertEqual(c.orden("cerrar:limon").valor, "agarrado")
+        self.assertEqual(self.bus.pinza.regs[102], SOSTEN_FRUTA["limon"])
+        for _ in range(30):                               # 3 s sosteniendo: no se escapa
+            self.bus.reloj.dormir(0.1)
+            c.mantener()
+        self.assertGreater(self.bus.pinza.cur, 0)
+        self.assertTrue(c.energizado and not c.congelado)
+
+    def test_mantener_lento_con_watchdog_de_1_s(self):
+        b = Brazo(self.bus, CAL, Config(watchdog=50), reloj=self.bus.reloj, cero=Cero(self.ruta_cero),
+                  log=lambda *_: None, usar_tornillo=False)
+        c = ControlBrazo(b, log=lambda *_: None)
+        self.assertTrue(c.orden("abrir").ok)
+        for _ in range(40):                               # 10 s vigilando a 4 Hz
+            self.bus.reloj.dormir(0.25)
+            c.mantener()
+        self.assertEqual(self.bus.pinza.regs[64], 1)

@@ -17,6 +17,11 @@ class PuertoSdk : public PuertoDxl {
     const int res = ph_->ping(port_, id, modelo, &err);
     return {res, err};
   }
+  RespuestaPuerto reboot(uint8_t id) override {   // el motor tarda ~0.5 s en volver: espera el cliente, no el bus
+    uint8_t err = 0;
+    const int res = ph_->reboot(port_, id, &err);
+    return {res, err};
+  }
   RespuestaPuerto leer(uint8_t id, uint16_t dir, uint8_t largo, std::vector<uint8_t>* datos) override {
     datos->assign(largo, 0);
     uint8_t err = 0;

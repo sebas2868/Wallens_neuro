@@ -157,7 +157,7 @@ Envuelve a `Brazo` y es el único cliente del servicio.
 | Servicio `Calibrar` | homing o cero reusado. Explícito, nunca automático al arrancar. `Recoger` lo rechaza sin cero |
 | Servicio `Apagar` / `Congelar` | paradas manuales |
 | Tópico `/brazo/estado` (5 Hz) | calibrado, fase, posición del tornillo, posición y corriente de la pinza, objeto agarrado |
-| Tópico `/brazo/ocupado` | `true` mientras el brazo se mueve o lleva un objeto |
+| Tópico `/brazo/ocupado` | `true` mientras el brazo se mueve (con un objeto agarrado las ruedas sí andan) |
 
 Mientras no esté decidido el método de cero (tornillo roto), el homing por tope queda **desactivado por parámetro**.
 

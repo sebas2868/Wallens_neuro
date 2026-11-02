@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 sys.path.insert(0, os.path.dirname(__file__))
 from mision_logica import (RADIOS, Config, Giro, Mision, Pedido, Recta, a_base, a_odom, ang,  # noqa: E402
-                           distancia_a_segmento, obstaculos, puntos_entrega, ruta)
+                           distancia_a_segmento, obstaculos, pedido_relativo, puntos_entrega, ruta)
 from mundo_falso import Mundo  # noqa: E402
 
 ZONA = (1.0, 1.0)
@@ -111,15 +111,18 @@ class Inicio(unittest.TestCase):
         self.assertEqual(s.fin[0], "fallo")
         self.assertIn("batería baja para empezar", s.fin[1])
 
-    def test_brazo_congelado_no_arranca(self):
+    def test_brazo_congelado_que_no_se_deja_rearmar_no_arranca(self):
         m, w = Mision(pedido()), Mundo(TRES)
         w.congelado = True
-        self.assertIn("congelado", correr(w, m).fin[1])
+        w._resolver = lambda orden: (False, "rearmar rechazada: lleva una fruta")
+        s = correr(w, m)
+        self.assertEqual(s.fin[0], "fallo")
+        self.assertIn("rearmar", s.fin[1])
 
     def test_sin_datos_falla_por_tiempo(self):
         m = Mision(pedido())
         s = None
-        for i in range(400):
+        for i in range(2000):
             s = m.paso(i * 0.05)
             if s.fin:
                 break
@@ -140,15 +143,12 @@ class MisionCompleta(unittest.TestCase):
             self.assertLess(math.dist((f.x, f.y), punto), 0.03, tipo)
         # sin ascensor nunca se ordena bajar ni subir
         self.assertFalse(any(o in ("bajar", "subir") for _, o in w.ordenes))
-        self.assertNotIn("BAJAR", estados(m))
 
-    def test_con_ascensor_baja_y_sube(self):
-        m = Mision(pedido(), Config(ascensor=True))
-        w = Mundo(TRES, ascensor=True)
-        s = correr(w, m)
+    def test_ordenes_al_brazo(self):
+        w = Mundo(TRES)
+        s = correr(w, Mision(pedido()))
         self.assertEqual(s.fin[0], "fin", s.fin)
-        ordenes = [o for _, o in w.ordenes]
-        self.assertEqual(ordenes, ["bajar", "abrir", "cerrar:limon", "subir", "bajar", "soltar", "subir", "cerrar"])
+        self.assertEqual([o for _, o in w.ordenes], ["abrir", "cerrar:limon", "soltar", "cerrar"])
 
     def test_orden_distinto_y_vuelve_a_home(self):
         p = pedido(frutas=["mandarina", "limon"], volver_home=True)
@@ -179,15 +179,15 @@ class MisionCompleta(unittest.TestCase):
         m.paso = espia
         correr(w, m)
         self.assertEqual(vistas["BUSCAR"], {"frutas"})
-        self.assertEqual(vistas["ALINEAR"], {"garra"})
+        self.assertEqual(vistas["RETROCEDER"], {"garra"})
         self.assertEqual(vistas["IR_A_ENTREGA"], {None})
 
 
 class Geometrias(unittest.TestCase):
     def test_para_a_d_parada_y_gira_hacia_la_fruta(self):
-        m, w = Mision(pedido(), hasta="GIRAR_180"), Mundo(TRES)
+        m, w = Mision(pedido(), hasta="GIRAR"), Mundo(TRES)
         s = correr(w, m)
-        self.assertEqual(s.fin, ("fin", "hasta GIRAR_180"))
+        self.assertEqual(s.fin, ("fin", "hasta GIRAR"))
         limon = w.frutas[0]
         bx, by = a_base(w.pose, (limon.x, limon.y))
         self.assertAlmostEqual(math.hypot(bx, by), m.cfg.d_parada, delta=0.04)
@@ -195,9 +195,10 @@ class Geometrias(unittest.TestCase):
         self.assertEqual(w.choques, [])
 
     def test_alinea_una_fruta_desviada(self):
-        # robot ya girado, limón 4 cm a un lado y 15 cm detrás de la zona de agarre
-        w = Mundo([("limon", -0.38, 0.04)])
-        m = Mision(pedido(zona=(-0.38, 0.04), entrega=(1.0, 0.0), angulo_linea=math.pi / 2), desde="ABRIR", hasta="VERIFICAR")
+        # robot ya girado, limón 4 cm a un lado, justo detrás de las puntas de los dedos (cam_garra ve centros de x
+        # -0.32 a -0.18 y |y| <= 6.5 cm, medido 2026-11-02: sin BUSCAR solo cuenta ella)
+        w = Mundo([("limon", -0.32, 0.04)])
+        m = Mision(pedido(zona=(-0.32, 0.04), entrega=(1.0, 0.0), angulo_linea=math.pi / 2), desde="ABRIR", hasta="VERIFICAR")
         s = correr(w, m)
         self.assertEqual(s.fin, ("fin", "hasta VERIFICAR"), m.final)
         self.assertTrue(w.frutas[0].agarrada)
@@ -255,7 +256,7 @@ class Busqueda(unittest.TestCase):
         m = Mision(pedido(radio=0.20))
         s = correr(w, m)
         self.assertEqual(s.fin[0], "fin", s.fin)
-        self.assertIn("RODEAR", estados(m))
+        self.assertGreater(abs(ang(m.phi - math.radians(-135))), math.radians(10))   # no llegó por la recta directa
         self.assertEqual(w.choques, [])
         self.assertTrue(any(f.tipo == "naranja" and math.dist((f.x, f.y), (0.88, 0.88)) < 1e-9 for f in w.frutas))
 
@@ -295,12 +296,13 @@ class Fallos(unittest.TestCase):
         self.assertEqual(estados(m).count("REINTENTO"), 1)
         self.assertEqual([c for c in w.choques if c[1] != "dedos cerrados"], [])
 
-    def test_dos_sin_agarre_fallan_sin_soltar_nada(self):
+    def test_tres_sin_agarre_fallan_sin_soltar_nada(self):
         w = Mundo(TRES)
-        w.fallar_cierres = 2
+        w.fallar_cierres = 3
         s = correr(w, Mision(pedido()))
         self.assertEqual(s.fin[0], "fallo")
-        self.assertIn("sin agarre tras 1 reintento", s.fin[1])
+        self.assertIn("sin agarre (tras 2 reintentos)", s.fin[1])
+        self.assertEqual([c for c in w.choques if c[1] != "dedos cerrados"], [])
         self.assertTrue(s.parada)
 
     def test_parada_a_mitad_deja_todo_quieto_y_sostiene_la_fruta(self):
@@ -324,7 +326,7 @@ class Fallos(unittest.TestCase):
         original = m.paso
 
         def congelar(t):
-            if m.estado == "ALINEAR":
+            if m.estado == "RETROCEDER":
                 w.congelado = True
             return original(t)
         m.paso = congelar
@@ -357,35 +359,162 @@ class Fallos(unittest.TestCase):
     def test_brazo_que_no_responde_falla_por_tiempo(self):
         w, m = Mundo(TRES, t_brazo=100.0), Mision(pedido())
         s = correr(w, m)
-        self.assertEqual(s.fin, ("fallo", "ABRIR: más de 5 s en el estado"))
+        self.assertEqual(s.fin, ("fallo", "ABRIR: más de 20 s en el estado"))
 
     def test_fruta_que_cam_garra_no_ve(self):
         w = Mundo(TRES, garra_x=(5.0, 6.0))          # cam_garra ciega
-        s = correr(w, Mision(pedido()))
+        m = Mision(pedido())
+        s = correr(w, m)
         self.assertEqual(s.fin[0], "fallo")
         self.assertIn("cam_garra", s.fin[1])
-        self.assertIn("ALINEAR", s.fin[1])
+        self.assertIn("RETROCEDER", s.fin[1])
+        self.assertEqual(estados(m).count("REINTENTO"), 2)
+        self.assertNotIn("cerrar:limon", [o for _, o in w.ordenes])
+
+
+class FallosReales(unittest.TestCase):
+    """Lo que pasó en el robot el 2026-11-02 (docs/mision-frutas-plan.md, «Fallos de la primera prueba»)."""
+    DETRAS = dict(zona=(-0.33, 0.02), entrega=(1.2, 0.0), angulo_linea=math.pi / 2)
+    DELANTE = dict(zona=(0.8, 0.0), entrega=(-1.0, 0.0), angulo_linea=math.pi / 2)
+
+    def test_agarra_aunque_cam_garra_parpadee_y_pierda_la_fruta_bajo_la_camara(self):
+        # fallo 1: "cam_garra perdió la fruta más de 1-2 s". Cuadros perdidos, una banda ciega de 4 cm al pasar
+        # bajo la cámara y un sesgo de 2 cm de cam_garra (x_agarre se mide con lo que ella ve: VERIFICAR lo registra)
+        for semilla in range(5):
+            w = Mundo([("limon", -0.33, 0.02)], semilla=semilla, perdida_garra=0.4, ciego_garra=(-0.29, -0.25),
+                      sesgo_garra=(0.02, 0.0))
+            m = Mision(pedido(**self.DETRAS), Config(x_agarre=-0.21), desde="ABRIR", hasta="VERIFICAR")
+            s = correr(w, m)
+            self.assertEqual(s.fin, ("fin", "hasta VERIFICAR"), (semilla, m.historial[-6:]))
+            self.assertTrue(w.frutas[0].agarrada, semilla)
+            self.assertEqual(w.choques, [])
+            self.assertAlmostEqual(m.agarre_visto[0], -0.21, delta=0.01)   # dónde ve la fruta ya agarrada
+
+    def test_un_brazo_congelado_sin_fruta_se_rearma_al_lanzar_otra_mision(self):
+        # fallo 2: un fallo anterior dejó el brazo congelado y la misión siguiente no arrancaba
+        w = Mundo([("limon", -0.33, 0.0)])
+        w.congelado = True
+        m = Mision(pedido(**self.DETRAS), desde="ABRIR", hasta="VERIFICAR")
+        s = correr(w, m)
+        self.assertEqual(s.fin, ("fin", "hasta VERIFICAR"), m.final)
+        self.assertEqual([o for _, o in w.ordenes][:2], ["rearmar", "abrir"])
+        self.assertTrue(any("rearm" in a for a in m.avisos), m.avisos)
+
+    def test_un_brazo_congelado_con_fruta_no_se_rearma(self):
+        w = Mundo([("limon", 0.0, 0.0, True)])
+        w.congelado = True
+        s = correr(w, Mision(pedido(), desde="IR_A_ENTREGA"))
+        self.assertEqual(s.fin[0], "fallo")
+        self.assertIn("congelado", s.fin[1])
+        self.assertEqual(w.ordenes, [])
+
+    def test_inicio_espera_los_datos_que_tardan_y_dice_cuales_faltan(self):
+        # fallo 3: los nodos tardan en subir; antes fallaba a los 10 s
+        w = Mundo([("limon", -0.33, 0.0)], inicio_bateria=25.0)
+        m = Mision(pedido(**self.DETRAS), desde="ABRIR", hasta="ABRIR")
+        s = correr(w, m)
+        self.assertEqual(s.fin, ("fin", "hasta ABRIR"), m.final)
+        self.assertTrue(any("battery_state" in a for a in m.avisos), m.avisos)
+
+    def test_si_el_detector_deja_de_publicar_falla_diciendolo(self):
+        # sin cuadros de la cámara pedida no hay nada que reintentar: antes acababa en "no encontró limon"
+        for caida in (3.0, 20.0):                  # en ACERCAR (cam_frutas) y en RETROCEDER (cam_garra)
+            w = Mundo([("limon", 0.8, 0.0)])
+            w.detector_caido = caida
+            m = Mision(pedido(**self.DELANTE), hasta="VERIFICAR")
+            s = correr(w, m)
+            self.assertEqual(s.fin[0], "fallo", caida)
+            self.assertIn("detector_frutas", s.fin[1])
+            self.assertEqual(w.choques, [])
+
+    def test_inicio_sin_datos_falla_diciendo_que_falta(self):
+        m = Mision(pedido())
+        s = None
+        for i in range(4000):
+            s = m.paso(i * 0.05)
+            if s.fin:
+                break
+        self.assertEqual(s.fin[0], "fallo")
+        for falta in ("odometry/filtered", "brazo/estado", "battery_state"):
+            self.assertIn(falta, s.fin[1])
+
+    def test_si_pierde_la_fruta_al_retroceder_se_aleja_gira_y_la_vuelve_a_buscar(self):
+        # la recogida entera desde el frente: cam_frutas la ve, se acerca, gira y retrocede con cam_garra. La primera
+        # vez cam_garra no ve nada: se aleja, gira, la busca otra vez con cam_frutas y a la segunda la agarra
+        w = Mundo([("limon", 0.8, 0.0)])
+        w.garra_ciega_hasta = 1e9
+        m = Mision(pedido(**self.DELANTE), hasta="VERIFICAR")
+        original = m.paso
+
+        def ver_al_reintentar(t):
+            if m.estado == "REINTENTO":
+                w.garra_ciega_hasta = -1.0
+            return original(t)
+        m.paso = ver_al_reintentar
+        s = correr(w, m)
+        self.assertEqual(s.fin, ("fin", "hasta VERIFICAR"), m.historial)
+        self.assertTrue(w.frutas[0].agarrada)
+        self.assertEqual(w.choques, [])
+        e = estados(m)
+        self.assertEqual(e.count("REINTENTO"), 1)
+        self.assertLess(e.index("REINTENTO"), e.index("CERRAR"))      # no cerró a ciegas
+        self.assertIn("BUSCAR", e[e.index("REINTENTO"):])
+
+    def test_una_camara_a_la_vez_y_apagadas_en_los_traslados(self):
+        m, w = Mision(pedido()), Mundo(TRES, prob_tipo=0.2)
+        vistas = {}
+        original = m.paso
+
+        def espia(t):
+            s = original(t)
+            vistas.setdefault(s.estado, set()).add(s.camara)
+            return s
+        m.paso = espia
+        s = correr(w, m)
+        self.assertEqual(s.fin[0], "fin", s.fin)
+        self.assertEqual(vistas["BUSCAR"], {"frutas"})
+        self.assertEqual(vistas["IR_A_ENTREGA"], {None})
+        self.assertTrue(all(len(c) == 1 for c in vistas.values()), vistas)
+
+
+class PruebaReal(unittest.TestCase):
+    """Lo que hace scripts/probar-mision.sh: limón 1.2 m al frente del robot, lo recoge y lo deja donde arrancó.
+    Con el launch corriendo desde antes, el robot no está en el origen de odom: el pedido es relativo a su pose."""
+    def pedido(self):
+        return Pedido(zona=(1.2, 0.0), radio=0.10, frutas=["limon"], entrega=(0.0, 0.0), angulo_linea=math.pi / 2)
+
+    def test_pedido_relativo(self):
+        p = pedido_relativo(self.pedido(), (0.5, -0.3, math.pi / 2))
+        self.assertAlmostEqual(math.dist(p.zona, (0.5, 0.9)), 0.0)
+        self.assertAlmostEqual(math.dist(p.entrega, (0.5, -0.3)), 0.0)
+        self.assertAlmostEqual(ang(p.angulo_linea - math.pi), 0.0)
+
+    def test_recoge_y_deja_el_limon_donde_arranco(self):
+        for semilla in range(4):
+            pose = (0.5, -0.3, math.radians(70))
+            limon = a_odom(pose, (1.2 + 0.03 * (semilla - 1), 0.02 * semilla))
+            w = Mundo([("limon", *limon)], pose=pose, semilla=semilla, perdida_garra=0.15, ciego_garra=(-0.28, -0.26),
+                      sesgo_garra=(0.015, -0.005), prob_tipo=0.05)
+            m = Mision(pedido_relativo(self.pedido(), pose), Config(x_agarre=-0.215, y_agarre=-0.005))
+            s = correr(w, m)
+            self.assertEqual(s.fin, ("fin", "1 frutas entregadas"), (semilla, m.historial[-5:]))
+            self.assertEqual(w.choques, [])
+            f = w.frutas[0]
+            self.assertLess(math.dist((f.x, f.y), pose[:2]), 0.03, semilla)
 
 
 class PorPartes(unittest.TestCase):
     def test_desde_girar_busca_antes(self):
         w = Mundo([("limon", 0.75, 0.0)])
-        m = Mision(pedido(zona=(0.75, 0.0), entrega=(0.0, 1.0)), desde="GIRAR_180", hasta="GIRAR_180")
+        m = Mision(pedido(zona=(0.75, 0.0), entrega=(0.0, 1.0)), desde="GIRAR", hasta="GIRAR")
         s = correr(w, m)
-        self.assertEqual(s.fin, ("fin", "hasta GIRAR_180"))
-        self.assertEqual(estados(m), ["INICIO", "BUSCAR", "GIRAR_180", "FIN"])
+        self.assertEqual(s.fin, ("fin", "hasta GIRAR"))
+        self.assertEqual(estados(m), ["INICIO", "BUSCAR", "GIRAR", "FIN"])
 
     def test_desde_entrega_exige_la_fruta_en_el_brazo(self):
         w = Mundo(TRES)
         s = correr(w, Mision(pedido(), desde="IR_A_ENTREGA"))
         self.assertIn("no lleva una fruta", s.fin[1])
-
-    def test_desde_un_estado_del_ascensor_sin_ascensor_salta(self):
-        w = Mundo([("limon", -0.30, 0.0)])
-        m = Mision(pedido(zona=(-0.30, 0.0), entrega=(1.0, 0.0), angulo_linea=math.pi / 2), desde="BAJAR", hasta="ABRIR")
-        s = correr(w, m)
-        self.assertEqual(estados(m), ["INICIO", "ABRIR", "FIN"])
-        self.assertEqual(s.fin, ("fin", "hasta ABRIR"))
 
 
 if __name__ == "__main__":

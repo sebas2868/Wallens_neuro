@@ -36,6 +36,12 @@ class SdkBus:
             raise ErrorBus(f"ID {i}: no responde al ping (res={res}, err={err})")
         return modelo
 
+    def reboot(self, i):
+        """Reinicia el motor (borra la alerta de hardware); tarda ~0.5 s en volver a responder."""
+        res, err = self._h.reboot(self._p, i)
+        if res != 0:
+            raise ErrorBus(f"ID {i}: fallo en el reboot (res={res}, err={err})")
+
     def leer(self, i, addr, n):
         f = {1: self._h.read1ByteTxRx, 2: self._h.read2ByteTxRx, 4: self._h.read4ByteTxRx}[n]
         v, res, err = f(self._p, i, addr)

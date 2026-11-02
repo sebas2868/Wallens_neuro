@@ -216,12 +216,35 @@ class TestGripper(Base):
         self.assertLess(max(vistas), APRIETE_FRUTA["naranja"])    # no aprieta el limón como a la naranja
         self.assertEqual(b.cfg.corriente_apriete, Config().corriente_apriete)   # deja la config como estaba
 
+    def test_preparar_reinicia_el_gripper_y_borra_la_sobrecarga(self):
+        self.bus.pinza.regs[70] = 32                       # 2026-11-02: sobrecarga que bloqueaba todo
+        b = self.brazo()
+        b.preparar()
+        self.assertEqual(self.bus.reboots, [PINZA])        # el tornillo, sin alerta, no se reinicia (perdería el cero)
+        self.assertEqual(self.bus.pinza.regs[70], 0)
+        b.energizar()
+        b.abrir()
+
+    def test_un_tornillo_con_alerta_se_reinicia_y_pierde_el_cero(self):
+        b = self.listo()
+        self.assertIsNotNone(b.abajo)
+        b.apagar()
+        self.bus.tornillo.regs[70] = 32
+        b.preparar()
+        self.assertIn(TORNILLO, self.bus.reboots)
+        self.assertIsNone(b.abajo)
+
     def test_medir_cierre_con_algo_entre_los_dedos_aborta(self):
         b = self.listo(calibrado=False)
         b.abrir()
         self.bus.pinza.objeto = {"contacto": 3300, "rigidez": 8}
         with self.assertRaises(AbortoSuave):
             b.medir_cierre()
+        b.abrir()
+        self.bus.pinza.objeto = {"contacto": 3765, "rigidez": 8}   # 2026-11-02: limón entre los dedos, paró en 3769
+        with self.assertRaises(AbortoSuave):
+            b.medir_cierre()
+        self.assertIsNone(b.cerrada)
 
     def test_abrir_y_cerrar_en_vacio(self):
         b = self.listo(calibrado=False)
@@ -410,7 +433,7 @@ class DriverFalso:
     def permitida(self, o):
         if o["id"] not in self.ids:
             return False
-        if o["tipo"] == 2:
+        if o["tipo"] in (2, 3):
             return True
         ini, fin = o["direccion"], o["direccion"] + o["largo"] - 1
         return any(a <= ini and fin <= b for a, b in self.rangos)
@@ -427,10 +450,15 @@ class DriverFalso:
             try:
                 if o["tipo"] == 2:
                     r["valor"] = self.bus.ping(o["id"])
+                elif o["tipo"] == 3:
+                    self.bus.reboot(o["id"])
                 elif o["tipo"] == 1:
                     self.bus.escribir(o["id"], o["direccion"], o["largo"], o["valor"])
                 elif o["largo"] > 4:
                     r["datos"], r["error_motor"] = self.bus.leer_bloque(o["id"], o["direccion"], o["largo"])
+                elif o["direccion"] == 70:              # como el driver: hasta 4 bytes en `valor`, con la alerta
+                    datos, r["error_motor"] = self.bus.leer_bloque(o["id"], 70, o["largo"])
+                    r["valor"] = int.from_bytes(datos, "little")
                 else:
                     r["valor"] = self.bus.leer(o["id"], o["direccion"], o["largo"])
             except ErrorBus:

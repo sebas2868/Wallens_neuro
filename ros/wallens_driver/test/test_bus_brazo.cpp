@@ -22,6 +22,10 @@ class PuertoFalso : public PuertoDxl {
     *modelo = 1030;
     return {0, 0};
   }
+  RespuestaPuerto reboot(uint8_t id) override {
+    registrar({'b', id, 0, 0, 0});
+    return {0, ALERTA_HW_BRAZO};          // el estado sale antes del reinicio: con la alerta todavía puesta
+  }
   RespuestaPuerto leer(uint8_t id, uint16_t dir, uint8_t largo, std::vector<uint8_t>* datos) override {
     registrar({'r', id, dir, largo, 0});
     if (lanzar) throw std::runtime_error("puerto roto");
@@ -339,4 +343,20 @@ TEST(BusBrazo, PingYModelo) {
   b.encolar({{TipoOp::Ping, 5, 0, 0, 0}}, rc.fin());
   b.atender(12.0);
   EXPECT_EQ(rc.r.resultados[0].valor, 1030u);
+}
+
+TEST(BusBrazo, RebootDeUnIdPermitidoConLaAlertaEnElEstado) {
+  PuertoFalso p;
+  BusBrazo b(&p, {});
+  Recogida rc;
+  b.encolar({{TipoOp::Reboot, 5, 0, 0, 0}}, rc.fin());
+  b.atender(12.0);
+  ASSERT_EQ(p.llamadas.size(), 1u);
+  EXPECT_EQ(p.llamadas[0].tipo, 'b');
+  EXPECT_EQ(rc.r.resultados[0].estado, Estado::Ok);         // solo la alerta: no es error del motor
+  Recogida otro;
+  b.encolar({{TipoOp::Reboot, 9, 0, 0, 0}}, otro.fin());    // ID fuera de la lista
+  b.atender(12.0);
+  EXPECT_EQ(otro.r.resultados[0].estado, Estado::Rechazada);
+  EXPECT_EQ(p.llamadas.size(), 1u);
 }

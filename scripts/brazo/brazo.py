@@ -19,7 +19,13 @@ MARCA_ADDR, MARCA = 222, 0xCA11     # Indirect Address 28: RAM sin uso; vuelve a
 ABIERTA, CERRADA, MARGEN_PINZA = 2794, 3851, 60   # recorrido medido del gripper (test-gripper.py)
 # corriente de apriete por fruta: la mínima que la sostuvo firme sin marcarla en la fase G (2026-11-02:
 # limón 200, naranja 300) + 25 % para el traslado. Sin tipo, o uno desconocido, usa Config.corriente_apriete.
+# dónde se juntan los dedos: medir_cierre dio 3890, 3891 y 3891 (2026-11-02). La misión usa este valor y no mide:
+# al medir cierra los dedos y en plena misión barrió el limón que estaba detrás.
+CIERRE_MEDIDO = 3890
 APRIETE_FRUTA = {"limon": 250, "naranja": 375}
+# tras agarrar baja a la mínima que la sostuvo firme: sostener el apriete en los traslados dejó al gripper con
+# sobrecarga (registro 70 = 32, 2026-11-02)
+SOSTEN_FRUTA = {"limon": 200, "naranja": 300}
 
 # Direcciones de la tabla de control
 MODO, LIMITE_CORRIENTE, LIM_POS_MAX, LIM_POS_MIN = 11, 38, 48, 52
@@ -95,6 +101,7 @@ class Config:
     retiro_dedos: int = 20           # ticks que se abre tras juntar los dedos, para soltar la presión
     gracia_p: float = 0.5            # s al empezar a mover la pinza sin vigilar la corriente: el despegue de los
                                      # dedos juntos pasó de 100 (2026-11-02) y al reintentar abrió bien
+    espera_reboot: float = 0.6       # s que tarda un motor en responder tras el reboot
     tiempo_apriete: float = 6        # s máximos apretando después del contacto
     paso_apriete: int = 2            # ticks que avanza la meta por lectura
     fraccion_desliz: float = 0.5     # corriente bajo esta fracción del apriete, ya apretado = se escapa
@@ -197,7 +204,7 @@ class Brazo:
                 raise AbortoDuro(str(e)) from e
             if estado:
                 try:
-                    hw = self.bus.leer(i, ERROR_HW, 1)
+                    hw = self.bus.leer_bloque(i, ERROR_HW, 1)[0][0]   # leer() lanza por la alerta
                 except ErrorBus:
                     hw = None
                 raise AbortoDuro(f"ID {i}: error de hardware (estado 0x{estado:02x}, registro 70 = {hw}; "
@@ -226,7 +233,10 @@ class Brazo:
 
     # --- arranque y parada ------------------------------------------------------------------------------
     def preparar(self):
-        """Comprueba los motores y los configura con el torque apagado. No mueve nada."""
+        """Reinicia el gripper (borra cualquier fallo que quedara), comprueba los motores y los configura con el torque
+        apagado. No mueve nada."""
+        for i in self.ids:
+            self._reiniciar(i)
         for i in self.ids:
             try:
                 modelo = self.bus.ping(i)
@@ -254,6 +264,28 @@ class Brazo:
         if TORNILLO in self.ids:
             self._escribir(TORNILLO, POS_META, 4, ini_t)    # meta = posición actual, sin salto
         self._escribir(PINZA, POS_META, 4, min(max(ini_p, self.pos_abrir), self.tope_apriete))
+
+    def _reiniciar(self, i):
+        """Reboot del gripper siempre: una alerta de hardware (2026-11-02: sobrecarga tras las pruebas de la pinza) se
+        queda puesta hasta reiniciarlo y bloquea todo. El tornillo solo si tiene la alerta: al reiniciarse vuelve a una
+        vuelta y pierde el cero. El error que había se registra, para que un fallo que se repite no pase inadvertido."""
+        try:
+            datos, alerta = self.bus.leer_bloque(i, ERROR_HW, 1)
+        except ErrorBus as e:
+            raise AbortoDuro(str(e)) from e
+        if datos[0] or alerta:
+            self.log(f"ID {i}: error de hardware {datos[0]} (1=voltaje, 4=sobrecalent., 8=encoder, 16=choque eléctrico, "
+                     "32=sobrecarga): se reinicia")
+        elif i != PINZA:
+            return
+        try:
+            self.bus.reboot(i)
+        except ErrorBus as e:
+            raise AbortoDuro(str(e)) from e
+        self._dormir(self.cfg.espera_reboot)              # con el torque apagado: nada que vigilar
+        if i == TORNILLO:
+            self.abajo = self.arriba = self.agarre_t = None
+            self.cero.borrar()
 
     def energizar(self):
         """Enciende el torque de ambos motores y arma el watchdog."""
@@ -321,6 +353,10 @@ class Brazo:
             # estrategia C de gripper-plan.md: con la meta congelada seguía oscilando; con poca corriente no empuja el juego
             self._escribir(PINZA, CORRIENTE_META, 2, self.cfg.corriente_reposo_p)
 
+    def usar_cierre(self, cerrada):
+        """Como medir_cierre pero con un valor ya medido, sin mover nada."""
+        self.cerrada, self.tope_apriete = cerrada, cerrada - self.cfg.margen_dedos
+
     def medir_cierre(self):
         """Cierra en vacío, despacio y con poca corriente, hasta que los dedos se juntan. Desde ahí el apriete puede
         llegar hasta ese punto (frutas chicas como el limón no tocaban antes de CERRADA - MARGEN_PINZA) y un contacto
@@ -345,14 +381,14 @@ class Brazo:
             if self.reloj.ahora() - inicio > c.tiempo_max_p:
                 raise AbortoSuave(f"La pinza no juntó los dedos en {c.tiempo_max_p} s")
         self._escribir(PINZA, POS_META, 4, actual - c.retiro_dedos)    # deja de empujar y suelta la presión
-        if actual < CERRADA - 4 * MARGEN_PINZA:
+        if actual < CERRADA - 10:       # se juntan en ~3890 (2026-11-02); con un limón entre los dedos paró en 3769
             raise AbortoSuave(f"Los dedos se detuvieron en {actual}, lejos del cierre medido ({CERRADA}): "
                               "¿algo entre los dedos?")
         fin = self.reloj.ahora() + 1.0
         while self._pos(PINZA) > actual - c.retiro_dedos + c.llegada_p and self.reloj.ahora() < fin:
             self._dormir(c.periodo)
             self._vigilar()
-        self.cerrada, self.tope_apriete = actual, actual - c.margen_dedos
+        self.usar_cierre(actual)
         self.log(f"    los dedos se juntan en {actual} (antes el cierre llegaba hasta {CERRADA - MARGEN_PINZA})")
         return actual
 
@@ -444,9 +480,13 @@ class Brazo:
         c.corriente_apriete = apriete
         c.corriente_agarre = min(apriete + 40, c.limite_corriente_p - 20)
         try:
-            return self.cerrar_y_apretar()
+            agarre = self.cerrar_y_apretar()
         finally:
             c.corriente_apriete, c.corriente_agarre = antes
+        if agarre is not None and tipo in SOSTEN_FRUTA:
+            self._escribir(PINZA, CORRIENTE_META, 2, SOSTEN_FRUTA[tipo])   # la meta queda donde apretó
+            self.log(f"    sosteniendo con corriente {SOSTEN_FRUTA[tipo]}")
+        return agarre
 
     # --- tornillo ---------------------------------------------------------------------------------------
     def _mover(self, destino, agarre=None, velocidad=None, corriente_max=None):

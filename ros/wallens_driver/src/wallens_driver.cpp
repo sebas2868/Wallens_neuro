@@ -308,7 +308,7 @@ class WallensDriver : public rclcpp::Node {
         [this](std::shared_ptr<rmw_request_id_t> cab, std::shared_ptr<wallens_interfaces::srv::TransaccionDxl::Request> req) {
           std::vector<wallens::OperacionDxl> ops;
           for (const auto& m : req->operaciones) {
-            if (m.tipo > static_cast<uint8_t>(wallens::TipoOp::Ping)) {
+            if (m.tipo > static_cast<uint8_t>(wallens::TipoOp::Reboot)) {
               wallens::RespuestaDxl r;
               r.motivo = "tipo de operación inválido: " + std::to_string(m.tipo);
               responder_brazo(cab, std::move(r));

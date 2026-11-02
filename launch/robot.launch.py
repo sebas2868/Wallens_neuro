@@ -61,12 +61,15 @@ def generate_launch_description():
       DeclareLaunchArgument('contenedor', default_value='false', choices=['true', 'false'],
                             description="'true': IMU, batería y TF fijas en el contenedor wallens_base; 'false': cada uno en su proceso"),
       base,
+      DeclareLaunchArgument('brazo', default_value='false', choices=['true', 'false'],
+                            description="'true': el driver ofrece brazo/transaccion (lo usa launch/mision.launch.py)"),
       DeclareLaunchArgument('freno', default_value='cpp', choices=['cpp', 'py'],
                             description="implementación del freno por obstáculo: 'cpp' o 'py'"),
       # Las ruedas son críticas: si el driver muere se cierra todo y systemd lo vuelve a lanzar (Restart=always,
       # con el chequeo previo); el driver sale con 1 en un fallo, pero ros2 launch puede devolver 0 igualmente
       Node(package='wallens_driver', executable='wallens_driver', name='wallens_driver', output='screen',
-           parameters=[os.path.join(get_package_share_directory('wallens_driver'), 'config', 'wallens_driver.yaml')],
+           parameters=[os.path.join(get_package_share_directory('wallens_driver'), 'config', 'wallens_driver.yaml'),
+                       {'brazo_habilitado': LaunchConfiguration('brazo')}],
            remappings=[('cmd_vel', 'cmd_vel_safe')],      # el driver solo oye lo que pasa por el freno
            # Núcleo 2 para él solo; su hilo de motores se pone en tiempo real (SCHED_FIFO 50, parámetro rt_priority;
            # LimitRTPRIO en la unidad) y no toca ROS. Sin /rosout: un log desde ese hilo no debe pasar por la capa DDS

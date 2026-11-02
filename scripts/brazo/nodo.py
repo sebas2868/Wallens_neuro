@@ -3,7 +3,9 @@ brazo/transaccion del driver (docs/brazo-bus-plan.md). Se lanza con launch/brazo
 
   Acción  brazo/recoger (Recoger)       baja, cierra, sube; feedback con la fase. Cancelarla congela (aborto suave)
   Srv     brazo/calibrar, brazo/soltar, brazo/congelar, brazo/apagar (std_srvs/Trigger)
-  Tópicos brazo/estado (EstadoBrazo, 5 Hz), brazo/ocupado (Bool, transient_local)
+  Tópico  brazo/orden (String): órdenes sueltas de la misión (abrir, soltar, rearmar, cerrar[:tipo], bajar, subir); cada una
+          responde en brazo/resultado (String, JSON {"orden", "ok", "texto"}; texto = "agarrado"/"sin_agarre" al cerrar)
+  Tópicos brazo/estado (EstadoBrazo, 5 Hz), brazo/ocupado (Bool, transient_local: solo mientras se mueve)
 Entradas: parada (suave), battery_critical y battery_state (duro), odom (las ruedas deben estar quietas)."""
 import json
 import os
@@ -18,7 +20,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from sensor_msgs.msg import BatteryState
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 
 from wallens_interfaces.action import Recoger
@@ -38,12 +40,14 @@ class NodoBrazo(Node):
         self.cal_ruta = p("calibracion", os.path.abspath(CAL)).value
         self.homing = p("homing_habilitado", False).value        # método de cero sin decidir: solo se reusa un cero vigente
         self.timeout_bus = p("timeout_bus", 0.4).value
-        self.watchdog = int(p("watchdog", 25).value)             # 20 ms por unidad: 500 ms con la cola y DDS de por medio
-        self.periodo = p("periodo_vigilancia", 0.1).value
+        self.watchdog = int(p("watchdog", 50).value)             # 20 ms por unidad: 1 s con la cola y DDS de por medio
+        self.periodo = p("periodo_vigilancia", 0.1).value        # mientras una orden mueve el gripper
+        self.periodo_reposo = p("periodo_reposo", 0.25).value    # quieto: solo mantiene vivo el watchdog (CPU)
         self.max_lineal = p("max_lineal_ruedas", 0.02).value     # m/s: sobre esto las ruedas "se mueven"
         self.max_angular = p("max_angular_ruedas", 0.05).value   # rad/s
         self.odom_timeout = p("odom_timeout", 2.0).value
         self.battery_timeout = p("battery_timeout", 2.0).value   # <= 0 lo desactiva (banco sin INA226)
+        self.usar_tornillo = p("usar_tornillo", False).value     # el tornillo (ID 3) está roto: solo el gripper
 
         self.control = None                                      # hasta que exista el servicio del bus
         self.transporte = TransporteRclpy(self, self.timeout_bus, espera_servicio=None)   # un solo cliente
@@ -65,13 +69,15 @@ class NodoBrazo(Node):
         self.pub_estado = self.create_publisher(EstadoBrazo, "brazo/estado", 1)
         self.pub_ocupado = self.create_publisher(Bool, "brazo/ocupado", transitoria)
         self._ocupado_publicado = None
+        self.pub_resultado = self.create_publisher(String, "brazo/resultado", 10)
+        self.create_subscription(String, "brazo/orden", self._al_orden, 10, callback_group=libre)
         for nombre, f in (("calibrar", "calibrar"), ("soltar", "soltar"), ("congelar", "congelar"), ("apagar", "apagar")):
             self.create_service(Trigger, f"brazo/{nombre}", lambda req, resp, f=f: self._trigger(f, resp),
                                 callback_group=libre)
         self.accion = ActionServer(self, Recoger, "brazo/recoger", execute_callback=self._ejecutar_recoger,
                                    goal_callback=self._al_meta, cancel_callback=self._al_cancelar, callback_group=libre)
         self.create_timer(1.0, self._buscar_bus, callback_group=aparte)
-        self.create_timer(self.periodo, self._mantener, callback_group=aparte)
+        self.create_timer(self.periodo_reposo, self._mantener, callback_group=aparte)
         self.create_timer(0.2, self._publicar, callback_group=rapido)
         self.create_timer(0.5, self._evaluar_bateria, callback_group=rapido)
         self.get_logger().info("wallens_brazo: esperando el servicio brazo/transaccion del driver")
@@ -86,10 +92,11 @@ class NodoBrazo(Node):
         with open(self.cal_ruta) as f:
             cal = json.load(f)
         cfg = Config(watchdog=self.watchdog, periodo=self.periodo)
-        brazo = Brazo(BusRos(transporte), cal, cfg, cero=Cero(), log=lambda *_: None)
+        brazo = Brazo(BusRos(transporte), cal, cfg, cero=Cero(), log=lambda *_: None, usar_tornillo=self.usar_tornillo)
         self.control = ControlBrazo(brazo, ruedas_quietas=self._ruedas_quietas, homing=self.homing,
                                     al_fase=self._al_fase, log=self.get_logger().info)
-        self.get_logger().info("Bus del brazo listo (IDs 3 y 5); falta calibrar: servicio brazo/calibrar")
+        self.get_logger().info("Bus del brazo listo (IDs 3 y 5); falta calibrar: servicio brazo/calibrar"
+                               if self.usar_tornillo else "Bus del brazo listo (solo el gripper, ID 5)")
 
     def _sin_bus(self, resp):
         resp.success, resp.message = False, "sin bus: el driver no ofrece brazo/transaccion (¿brazo_habilitado:=true?)"
@@ -140,7 +147,7 @@ class NodoBrazo(Node):
         m.voltaje = float(pz.get("voltaje", 0.0))
         m.temperatura_max = int(max(t.get("temp", 0), pz.get("temp", 0)))
         self.pub_estado.publish(m)
-        ocupado = e["ocupado"] or e["objeto"]               # /brazo/ocupado: se mueve o lleva un objeto
+        ocupado = e["ocupado"]                              # solo mientras se mueve: con la fruta agarrada hay que andar
         if ocupado != self._ocupado_publicado:
             self._ocupado_publicado = ocupado
             self.pub_ocupado.publish(Bool(data=ocupado))
@@ -156,6 +163,15 @@ class NodoBrazo(Node):
         r = getattr(self.control, nombre)()
         resp.success, resp.message = r.ok, r.mensaje
         return resp
+
+    def _al_orden(self, m):
+        if not self.control:
+            r_ok, texto = False, "sin bus: el driver no ofrece brazo/transaccion"
+        else:
+            r = self.control.orden(m.data)
+            r_ok, texto = r.ok, (r.valor or r.mensaje) if r.ok else r.mensaje
+        self.get_logger().info(f"orden {m.data}: {'ok' if r_ok else 'FALLA'} {texto}")
+        self.pub_resultado.publish(String(data=json.dumps({"orden": m.data, "ok": r_ok, "texto": texto})))
 
     def _al_meta(self, _):
         if not self.control or self.control.ocupado:
@@ -186,7 +202,7 @@ class NodoBrazo(Node):
 def main():
     rclpy.init()
     nodo = NodoBrazo()
-    ejecutor = MultiThreadedExecutor(num_threads=6)
+    ejecutor = MultiThreadedExecutor(num_threads=4)          # una orden, la vigilancia, estado/batería y odom
     ejecutor.add_node(nodo)
     try:
         ejecutor.spin()

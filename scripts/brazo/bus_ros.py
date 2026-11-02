@@ -6,7 +6,7 @@ import threading
 
 from .bus import ErrorBus
 
-LEER, ESCRIBIR, PING = 0, 1, 2
+LEER, ESCRIBIR, PING, REBOOT = 0, 1, 2, 3
 OK = 0
 ALERTA_HW = 0x80
 ESTADOS = {1: "no ejecutada", 2: "rechazada por la lista blanca", 3: "error de comunicación", 4: "error del motor"}
@@ -46,6 +46,11 @@ class BusRos:
         self._comprobar(op, r)
         return r["valor"]
 
+    def reboot(self, i):
+        op = {"tipo": REBOOT, "id": i, "direccion": 0, "largo": 0, "valor": 0}
+        r = self._una(op, 0)
+        self._comprobar(op, r, permitir_alerta=True)    # el estado sale antes del reinicio, con la alerta
+
     def leer(self, i, addr, n):
         op = {"tipo": LEER, "id": i, "direccion": addr, "largo": n, "valor": 0}
         r = self._una(op, self._reintentos)
@@ -56,6 +61,8 @@ class BusRos:
         op = {"tipo": LEER, "id": i, "direccion": addr, "largo": n, "valor": 0}
         r = self._una(op, self._reintentos)
         self._comprobar(op, r, permitir_alerta=True)
+        if n <= 4:                                # el driver devuelve hasta 4 bytes en `valor`, no en `datos`
+            return int(r["valor"]).to_bytes(n, "little"), r["error_motor"]
         return bytes(r["datos"]), r["error_motor"]
 
     def escribir(self, i, addr, n, v):

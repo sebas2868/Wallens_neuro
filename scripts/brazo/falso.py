@@ -96,6 +96,7 @@ class BusFalso:
         self.fallos = {}                       # (id, addr) -> mensaje: lecturas/escrituras que fallan
         self.lecturas_bloque = 0               # transacciones de bloque (leer_bloque)
         self.lecturas = 0                      # lecturas sueltas (leer)
+        self.reboots = []                      # IDs reiniciados
         self.reloj = RelojFalso(self)
 
     @property
@@ -140,6 +141,17 @@ class BusFalso:
         self._motor(i, -1)
         return 1030
 
+    def reboot(self, i):
+        """Como cortar_energia, pero de un solo motor: RAM por defecto (torque off), alerta borrada, una vuelta."""
+        self._motor(i, -2)
+        self.reboots.append(i)
+        m = self.motores[i]
+        vuelta = m.pos - m.pos % 4096
+        nuevo = Motor(m.id, m.pos % 4096, None if m.tope_min is None else m.tope_min - vuelta,
+                      None if m.tope_max is None else m.tope_max - vuelta)
+        nuevo.objeto = m.objeto
+        self.motores[i] = nuevo
+
     def leer_bloque(self, i, addr, n):
         """(bytes, estado): una sola transacción; el estado trae la alerta de hardware (bit 7) si el registro 70 != 0."""
         for a in range(addr, addr + n):
@@ -148,7 +160,7 @@ class BusFalso:
         m = self._motor(i, addr)
         self.lecturas_bloque += 1
         datos = bytearray(n)
-        for a, ancho, valor in ((126, 2, m.cur & 0xFFFF), (132, 4, int(m.pos) & 0xFFFFFFFF),
+        for a, ancho, valor in ((70, 1, m.regs.get(70, 0)), (126, 2, m.cur & 0xFFFF), (132, 4, int(m.pos) & 0xFFFFFFFF),
                                 (144, 2, m.regs.get(144, 0)), (146, 1, m.regs.get(146, 0))):
             if addr <= a and a + ancho <= addr + n:
                 datos[a - addr:a - addr + ancho] = valor.to_bytes(ancho, "little")

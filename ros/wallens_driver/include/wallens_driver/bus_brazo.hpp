@@ -18,7 +18,7 @@
 
 namespace wallens {
 
-enum class TipoOp : uint8_t { Leer = 0, Escribir = 1, Ping = 2 };
+enum class TipoOp : uint8_t { Leer = 0, Escribir = 1, Ping = 2, Reboot = 3 };   // Reboot: borra la alerta de hardware
 
 struct OperacionDxl {
   TipoOp tipo = TipoOp::Leer;
@@ -55,6 +55,7 @@ class PuertoDxl {
  public:
   virtual ~PuertoDxl() = default;
   virtual RespuestaPuerto ping(uint8_t id, uint16_t* modelo) = 0;
+  virtual RespuestaPuerto reboot(uint8_t id) = 0;
   virtual RespuestaPuerto leer(uint8_t id, uint16_t dir, uint8_t largo, std::vector<uint8_t>* datos) = 0;
   virtual RespuestaPuerto escribir(uint8_t id, uint16_t dir, uint8_t largo, uint32_t valor) = 0;
 };
@@ -204,7 +205,7 @@ class BusBrazo {
     bool id_ok = false;
     for (uint8_t i : cfg_.ids) id_ok = id_ok || i == op.id;
     if (!id_ok) return false;
-    if (op.tipo == TipoOp::Ping) return true;
+    if (op.tipo == TipoOp::Ping || op.tipo == TipoOp::Reboot) return true;
     if (op.largo == 0) return false;
     if (op.tipo == TipoOp::Escribir && op.largo != 1 && op.largo != 2 && op.largo != 4) return false;
     if (op.tipo == TipoOp::Leer && op.largo > 32) return false;
@@ -255,6 +256,7 @@ class BusBrazo {
     uint16_t modelo = 0;
     switch (op.tipo) {
       case TipoOp::Ping: rp = puerto_->ping(op.id, &modelo); break;
+      case TipoOp::Reboot: rp = puerto_->reboot(op.id); break;
       case TipoOp::Leer: rp = puerto_->leer(op.id, op.direccion, op.largo, &datos); break;
       case TipoOp::Escribir: rp = puerto_->escribir(op.id, op.direccion, op.largo, op.valor); break;
     }

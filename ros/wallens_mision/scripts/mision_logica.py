@@ -1,10 +1,14 @@
-"""Lógica de la misión de recoger frutas, sin ROS: la usará mision_frutas.py y se prueba en test/ con un mundo falso.
+"""Lógica de la misión de recoger frutas, sin ROS: la usa mision_frutas.py y se prueba en test/ con un mundo falso.
 
 Máquina de estados de docs/mision-frutas-plan.md. El nodo le pasa observaciones (on_*) y en cada ciclo llama a
-paso(t), que devuelve una Salida: velocidad para /cmd_vel, orden al brazo (una sola vez, al entrar al estado), qué
-cámara encender y, al terminar, ("fin" | "fallo", motivo). Coordenadas en odom (origen = arranque, x al frente, y a la
-izquierda, la convención de ROS); las frutas vistas llegan en base_link. En un fallo nunca suelta la fruta: para, pide
-/parada y espera a una persona. Los tiempos (`t`) son segundos de un reloj monótono que pasa el que llama."""
+paso(t), que devuelve una Salida: velocidad para /cmd_vel, orden al brazo (una sola vez), qué cámara encender (una a
+la vez), un aviso para el registro y, al terminar, ("fin" | "fallo", motivo). Coordenadas en odom (origen = arranque,
+x al frente, y a la izquierda, la convención de ROS); las frutas vistas llegan en base_link.
+
+La fruta elegida vive en odom (`objetivo`): cam_frutas la sitúa desde lejos, cam_garra la corrige de cerca y entre
+cuadros la lleva la odometría, así que un cuadro perdido no detiene nada. Cerca de la fruta, si algo sale mal (cam_garra
+no la confirma, sin agarre), REINTENTO: abre, se aleja, gira hacia ella y la vuelve a BUSCAR con cam_frutas. En un fallo
+nunca suelta la fruta: para, pide /parada y espera a una persona. Los tiempos (`t`) son segundos de un reloj monótono."""
 import math
 from collections import deque
 from dataclasses import dataclass, field
@@ -20,20 +24,19 @@ DEDOS_CERRADOS = 0.035                   # semiancho
 DEDOS_ABIERTOS = (0.106, 0.136)          # cada dedo abierto ocupa de |y| a |y|
 ALCANCE = math.hypot(DEDOS_X[0], DEDOS_CERRADOS)   # lo que barre el gripper cerrado al girar en el sitio
 
-# Orden normal de un ciclo (una fruta). SIGUIENTE decide si se vuelve a IR_A_ZONA, a VOLVER_HOME o a FIN.
-SECUENCIA = ("INICIO", "IR_A_ZONA", "BUSCAR", "RODEAR", "ACERCAR", "GIRAR_180", "BAJAR", "ABRIR", "ALINEAR",
-             "CERRAR", "VERIFICAR", "SUBIR", "SALIR", "IR_A_ENTREGA", "ORIENTAR", "DEJAR", "BAJAR_ENTREGA", "SOLTAR",
-             "SUBIR_ENTREGA", "ALEJAR", "CERRAR_VACIO", "SIGUIENTE")
-ASCENSOR = {"BAJAR", "SUBIR", "BAJAR_ENTREGA", "SUBIR_ENTREGA"}          # se saltan sin ascensor
-CON_FRUTA = {"SUBIR", "SALIR", "IR_A_ENTREGA", "ORIENTAR", "DEJAR", "BAJAR_ENTREGA", "SOLTAR"}   # el brazo ya la lleva
-NECESITAN_FRUTA = {"RODEAR", "ACERCAR", "GIRAR_180"}      # con --desde, antes la localiza un BUSCAR
-CAM_FRUTAS = {"IR_A_ZONA", "BUSCAR", "ACERCAR"}
-CAM_GARRA = {"ABRIR", "ALINEAR", "CERRAR", "VERIFICAR", "REINTENTO"}
+# Orden normal de un ciclo (una fruta). SIGUIENTE decide si se vuelve a IR_A_ZONA, a VOLVER_HOME o a FIN; REINTENTO
+# (desde RETROCEDER, CERRAR o VERIFICAR) vuelve a BUSCAR.
+SECUENCIA = ("INICIO", "IR_A_ZONA", "BUSCAR", "ACERCAR", "GIRAR", "ABRIR", "RETROCEDER", "CERRAR", "VERIFICAR",
+             "SALIR", "IR_A_ENTREGA", "DEJAR", "SOLTAR", "ALEJAR", "CERRAR_VACIO", "SIGUIENTE")
+CON_FRUTA = {"SALIR", "IR_A_ENTREGA", "DEJAR", "SOLTAR"}   # el brazo ya la lleva
+NECESITAN_FRUTA = {"ACERCAR", "GIRAR"}                     # con --desde, antes la localiza un BUSCAR
+CAMARA = dict(IR_A_ZONA="frutas", BUSCAR="frutas", ACERCAR="frutas", REINTENTO="frutas",
+              GIRAR="garra", ABRIR="garra", RETROCEDER="garra", CERRAR="garra", VERIFICAR="garra")
+TOPICO = {"frutas": "frutas/detecciones", "garra": "garra/fruta"}
 
 
 @dataclass
 class Config:
-    ascensor: bool = False           # el tornillo está roto: BAJAR/SUBIR se saltan y se agarra con el gripper abajo
     # movimiento (el freno LiDAR filtra /cmd_vel igual; esto solo limita lo que se pide)
     v_max: float = 0.10              # m/s
     v_min: float = 0.03
@@ -50,23 +53,26 @@ class Config:
     d_vista: float = 0.80            # m del centro de la zona donde se detiene a mirar
     d_parada: float = 0.40           # m de la fruta antes del giro: alcance del gripper (0.285) + fruta + margen
     tol_parada: float = 0.02
-    x_agarre: float = -0.23          # centro de la zona de agarre en base_link (a medir en la fase 0)
+    # zona de agarre: dónde ve cam_garra la fruta ya agarrada (VERIFICAR lo registra en `agarre_visto`); en el marco
+    # de cam_garra, que puede no coincidir con la huella (docs/mision-frutas-plan.md, «Geometría del agarre»)
+    x_agarre: float = -0.23
+    y_agarre: float = 0.0
     tol_agarre_x: float = 0.015
     tol_agarre_y: float = 0.012
     d_previo: float = 0.50           # m de la línea de entrega al punto previo (llega perpendicular)
     alejar: float = 0.30             # m que avanza tras soltar, antes de cerrar la pinza
     separacion_min: float = 0.22     # dedos abiertos ±0.136 + fruta + margen
-    # búsqueda
+    # búsqueda con cam_frutas
     barrido: tuple = (0.0, 20.0, -20.0, 40.0, -40.0, 0.0)   # grados respecto a la dirección de la zona
     espera_mirar: float = 0.6        # s quieto antes de creer a la cámara (latencia)
     tiempo_mirar: float = 2.0        # s mirando en cada dirección del barrido
     margen_zona: float = 0.15        # m que se acepta fuera del radio dado
     cuadros: int = 3                 # detecciones seguidas y coherentes para creer algo
-    coherencia: float = 0.05         # m: una detección a menos de esto del objetivo es el objetivo
     agrupar: float = 0.07            # m de la media de un grupo para sumar una detección (las frutas miden >= 6 cm)
     minimo_mirar: float = 1.0        # s mirando antes de decidir, para ver también a las vecinas
     cuadros_vecina: int = 2          # detecciones para tener en cuenta una vecina (más vale esquivar de más)
     seguimiento: float = 0.08        # m: en ACERCAR solo actualiza con detecciones cerca del objetivo
+    radio_rebusca: float = 0.15      # m alrededor de la última estimación donde busca tras un REINTENTO
     # frutas vecinas: dirección de aproximación que no las toque
     d_aproximacion: float = 0.70     # m de la fruta: radio al que la rodea para cambiar de dirección
     paso_aproximacion: float = 15.0  # grados entre direcciones candidatas
@@ -74,30 +80,38 @@ class Config:
     tolerancia_eje: float = math.radians(5)   # desvío del eje y del rumbo al retroceder con los dedos abiertos
     salida: float = 0.30             # m que avanza en recta tras agarrar, antes de girar
     margen_ruta: float = 0.04        # m libres entre el chasis y una fruta conocida en los traslados
-    # alineación con cam_garra
-    v_alinear: float = 0.03
-    v_alinear_min: float = 0.01
-    k_alinear: float = 0.5
+    # RETROCEDER con cam_garra
+    v_retro: float = 0.03
+    v_retro_min: float = 0.01
+    k_retro: float = 0.5
     k_lateral: float = 1.5           # w = -k · y de la fruta (está detrás: girar a la derecha la acerca al eje)
     w_lateral: float = 0.15
-    retroceso_max: float = 0.25      # m que puede moverse en ALINEAR
-    perdida_garra: float = 1.0       # s sin ver la fruta tras haberla visto
-    sin_garra: float = 1.5           # s en la zona según la odometría sin que cam_garra la vea
-    reintento_avance: float = 0.05
-    reintentos: int = 1
-    tiempo_verificar: float = 3.0
+    retroceso_max: float = 0.30      # m que puede moverse en RETROCEDER
+    campo_garra: tuple = (-0.32, -0.18, 0.065)   # x de, x a, |y|: centros de fruta que ve cam_garra (fase 0)
+    margen_campo: float = 0.02       # m: solo espera a cam_garra con la estimación bien dentro de su campo
+    puerta_garra: float = 0.10       # m: una detección de cam_garra más lejos de la estimación no es la fruta
+    puerta_fina: float = 0.05        # m: ídem, ya confirmada
+    k_garra: float = 0.5             # peso de cada detección de cam_garra en la estimación
+    confirmaciones: int = 2          # detecciones de cam_garra para fiarse de la estimación
+    perdida: float = 0.6             # s sin una detección válida: la fruta está perdida
+    espera_perdida: float = 1.5      # s parado esperando a que cam_garra la vuelva a ver
+    ciego_max: float = 0.06          # m que sigue con la odometría sin verla (pasa bajo la cámara)
+    tiempo_verificar: float = 1.5    # s mirando la fruta agarrada
+    reintentos: int = 2
+    alejar_reintento: float = 0.30   # m que se aleja antes de girar y buscar otra vez (cam_frutas ve desde ~0.4 m)
+    pausa_orden: float = 0.5         # s quieto antes de una orden al brazo: cerrar exige ruedas quietas en /odom
     # supervisión
     bateria_inicio: float = 14.6     # V de media para empezar
     bateria_min: float = 14.4        # V de media durante la misión
     ventana_bateria: float = 10.0
     dato_timeout: float = 0.5        # s sin pose ni estado del brazo
     bateria_timeout: float = 3.0
-    garra_timeout: float = 0.3       # s que vale un cuadro de cam_garra
+    camara_timeout: float = 5.0      # s sin mensajes de la cámara pedida; abrirla tarda 3.4 s cam_frutas, 1.4 cam_garra
     duracion_max: float = 900.0
     tiempos: dict = field(default_factory=lambda: dict(
-        INICIO=10, IR_A_ZONA=60, BUSCAR=40, RODEAR=60, ACERCAR=40, GIRAR_180=20, BAJAR=60, ABRIR=5, ALINEAR=30, CERRAR=5,
-        VERIFICAR=10, REINTENTO=15, SUBIR=60, SALIR=15, IR_A_ENTREGA=90, ORIENTAR=20, DEJAR=30, BAJAR_ENTREGA=60, SOLTAR=5,
-        SUBIR_ENTREGA=60, ALEJAR=15, CERRAR_VACIO=5, SIGUIENTE=1, VOLVER_HOME=90))
+        INICIO=60, IR_A_ZONA=60, BUSCAR=40, ACERCAR=90, GIRAR=20, ABRIR=20, RETROCEDER=40, CERRAR=20, VERIFICAR=10,
+        REINTENTO=40, SALIR=15, IR_A_ENTREGA=90, DEJAR=40, SOLTAR=20, ALEJAR=15, CERRAR_VACIO=20, SIGUIENTE=1,
+        VOLVER_HOME=90))
 
 
 @dataclass
@@ -116,8 +130,9 @@ class Salida:
     estado: str
     v: float = 0.0
     w: float = 0.0
-    orden: str = None                # "bajar", "subir", "abrir", "cerrar", "cerrar:<tipo>", "soltar"
-    camara: str = None               # "frutas", "garra" o None
+    orden: str = None                # "abrir", "rearmar", "cerrar", "cerrar:<tipo>", "soltar"
+    camara: str = None               # "frutas", "garra" o None (apagadas)
+    aviso: str = None                # qué espera o qué pasó, para el registro
     fin: tuple = None                # ("fin" | "fallo", motivo)
     parada: bool = False             # publicar /parada (solo en un fallo)
 
@@ -143,6 +158,19 @@ def a_odom(pose, p):
     x, y, th = pose
     c, s = math.cos(th), math.sin(th)
     return (x + c * p[0] - s * p[1], y + s * p[0] + c * p[1])
+
+
+def adelante(d):
+    """Punto a `d` m al frente de la pose (atrás si es negativo), para una Recta."""
+    return lambda pose: (pose[0] + d * math.cos(pose[2]), pose[1] + d * math.sin(pose[2]))
+
+
+def pedido_relativo(pedido, pose):
+    """El pedido con la zona, la entrega y la línea dadas respecto a `pose` (x al frente del robot al lanzar la misión,
+    y a su izquierda) pasado a odom: la entrega (0, 0) es donde estaba el robot. VOLVER_HOME va al origen de odom."""
+    return Pedido(zona=a_odom(pose, pedido.zona), radio=pedido.radio, frutas=list(pedido.frutas),
+                  entrega=a_odom(pose, pedido.entrega), angulo_linea=ang(pedido.angulo_linea + pose[2]),
+                  separacion=pedido.separacion, volver_home=pedido.volver_home)
 
 
 def puntos_entrega(pedido, n):
@@ -192,7 +220,7 @@ def aproximacion_libre(fruta, phi, vecinas, cfg, r_fruta):
     """Si recoger `fruta` llegando desde la dirección `phi` (ángulo de la fruta hacia el robot) no toca ninguna
     vecina [(tipo, (x, y))]: acercarse de frente, girar 180° (se revisa la vuelta entera, el sentido no se sabe),
     retroceder con los dedos abiertos hasta la zona de agarre, salir en recta con la fruta y girar ahí. El
-    retroceso se revisa también con el eje y el rumbo desviados `tolerancia_eje`: ALINEAR corrige girando."""
+    retroceso se revisa también con el eje y el rumbo desviados `tolerancia_eje`: RETROCEDER corrige girando."""
     def pose(d, rumbo, eje=phi):
         return (fruta[0] + d * math.cos(eje), fruta[1] + d * math.sin(eje), rumbo)
     desvios = (-cfg.tolerancia_eje, 0.0, cfg.tolerancia_eje)
@@ -323,6 +351,8 @@ class Mision:
         self._validar(desde, hasta)
         self.desde, self.hasta = desde, hasta
         self.saltar_a = desde                      # se consume al salir de INICIO (o de BUSCAR)
+        primero = ("BUSCAR" if desde in NECESITAN_FRUTA else desde) if desde else "IR_A_ZONA"
+        self.camara_inicio = CAMARA.get(primero)   # INICIO ya la enciende y espera a que su detector publique
         e0 = puntos_entrega(pedido, 1)[0]
         n = (-math.sin(pedido.angulo_linea), math.cos(pedido.angulo_linea))
         lado = (pedido.zona[0] - e0[0]) * n[0] + (pedido.zona[1] - e0[1]) * n[1]
@@ -333,14 +363,19 @@ class Mision:
         self.pose, self.t_pose = None, -math.inf
         self.brazo, self.t_brazo = None, -math.inf
         self.voltajes, self.t_bateria = deque(), -math.inf
+        self.t_camara = {"frutas": -math.inf, "garra": -math.inf}   # último mensaje de cada detector
+        self.camara_pedida, self.t_camara_pedida = None, -math.inf   # la que se enciende y desde cuándo
         self.parada = False
         self.resultado = None                      # (orden, ok, texto) de la última orden al brazo
-        self.garra, self.t_garra, self.t_garra_vista, self.cuadros_garra = None, -math.inf, -math.inf, 0
         self.objetivo = None                       # (x, y) en odom de la fruta elegida
+        self.centro, self.radio_busqueda = pedido.zona, pedido.radio   # dónde busca BUSCAR
         self.vecinas, self.phi = [], None          # otras frutas de la zona y dirección de aproximación
         self.vistos = set()
         self.reintentos = 0
+        self.agarre_visto = None                   # (x, y) medianos de cam_garra con la fruta agarrada (VERIFICAR)
         self.entregadas = []                       # (tipo, punto) en el orden en que se dejaron
+        self.faltan = []                           # lo que INICIO sigue esperando
+        self.avisos = []                           # avisos distintos, en orden, para depurar y para los tests
         self.t0 = None
         self.estado, self.final = None, None
         self.historial = []                        # (t, estado) de cada entrada, para depurar y para los tests
@@ -387,12 +422,13 @@ class Mision:
 
     def on_frutas(self, frutas, t):
         """Detecciones de cam_frutas: lista de (tipo, x, y) en base_link."""
+        self.t_camara["frutas"] = t
         if self.pose is None:
             return
         en_odom = [(tipo, a_odom(self.pose, (x, y))) for tipo, x, y in frutas]
         if self.estado == "BUSCAR":
             self._cuadro_busqueda(en_odom, t)
-        elif self.estado == "ACERCAR":
+        elif self.estado == "ACERCAR" and not self.maniobras:
             pedida = self.pedida()
             cerca = [p for tipo, p in en_odom if tipo == pedida and math.dist(p, self.objetivo) <= self.cfg.seguimiento]
             if cerca:
@@ -400,17 +436,14 @@ class Mision:
                 self.objetivo = ((self.objetivo[0] + p[0]) / 2, (self.objetivo[1] + p[1]) / 2)
 
     def on_garra(self, visible, x, y, t):
-        """cam_garra: si ve una fruta, su centro en base_link."""
-        self.t_garra = t
+        """cam_garra: si ve una fruta, su centro en base_link (el tipo no se usa: de cerca cambia entre cuadros)."""
+        self.t_camara["garra"] = t
         if not visible or self.pose is None:
-            self.garra, self.cuadros_garra = None, 0
             return
-        c = self.cfg
-        self.garra, self.t_garra_vista = (x, y), t
-        en_zona = abs(x - c.x_agarre) <= c.tol_agarre_x and abs(y) <= c.tol_agarre_y
-        self.cuadros_garra = self.cuadros_garra + 1 if en_zona else 0
-        if self.estado == "ALINEAR":
-            self.objetivo = a_odom(self.pose, (x, y))
+        if self.estado == "RETROCEDER":
+            self._cuadro_garra(a_odom(self.pose, (x, y)), t)
+        elif self.estado == "VERIFICAR":
+            self.vistas_agarre.append((x, y))
 
     def pedida(self):
         return self.p.frutas[self.indice]
@@ -430,9 +463,11 @@ class Mision:
             self.estado = "FALLO"
             self.historial.append((t, "FALLO"))
             return Salida("FALLO", fin=self.final, parada=True)
+        if s.aviso and (not self.avisos or self.avisos[-1] != s.aviso):
+            self.avisos.append(s.aviso)
         if self.final:
             return Salida(self.estado, fin=self.final)
-        s.camara = "frutas" if self.estado in CAM_FRUTAS else "garra" if self.estado in CAM_GARRA else None
+        s.camara = self.camara_inicio if self.estado == "INICIO" else CAMARA.get(self.estado)
         return s
 
     def _vigilar(self, t):
@@ -442,6 +477,8 @@ class Mision:
         if t - self.t0 > c.duracion_max:
             raise Fallo(f"misión de más de {c.duracion_max:.0f} s")
         if t - self.t_estado > c.tiempos[self.estado]:
+            if self.estado == "INICIO" and self.faltan:
+                raise Fallo(f"en {c.tiempos['INICIO']} s no llegó: " + ", ".join(self.faltan))
             raise Fallo(f"más de {c.tiempos[self.estado]} s en el estado")
         if self.estado == "INICIO":
             return                                 # INICIO revisa los datos él mismo y espera a que lleguen
@@ -453,6 +490,9 @@ class Mision:
             raise Fallo("el brazo se congeló (aborto suave)")
         if t - self.t_bateria > c.bateria_timeout:
             raise Fallo("sin /battery_state reciente")
+        cam = self.camara_pedida                   # contando desde que se pidió: abrirla tarda
+        if cam and t - max(self.t_camara[cam], self.t_camara_pedida) > c.camara_timeout:
+            raise Fallo(f"detector_frutas no publica {TOPICO[cam]} (¿se cayó o se soltó cam_{cam}?)")
         media = self._bateria_media()
         if media is not None and t - self.voltajes[0][0] >= 0.5 * c.ventana_bateria and media < c.bateria_min:
             raise Fallo(f"batería baja: {media:.2f} V de media")
@@ -463,12 +503,15 @@ class Mision:
     def _entrar(self, estado, t):
         self.estado, self.t_estado = estado, t
         self.historial.append((t, estado))
-        self.maniobras, self.orden, self.orden_emitida, self.resultado = deque(), None, False, None
+        self.maniobras, self.orden_emitida, self.resultado = deque(), False, None
+        cam = self.camara_inicio if estado == "INICIO" else CAMARA.get(estado)
+        if cam != self.camara_pedida:
+            self.camara_pedida, self.t_camara_pedida = cam, t
         getattr(self, "_al_entrar_" + estado.lower(), lambda t: None)(t)
 
     def _terminar(self, t, siguiente=None):
-        """Sale del estado actual: al `siguiente` dado o al que sigue en SECUENCIA (saltando el ascensor)."""
-        if self.estado == self.hasta:
+        """Sale del estado actual: al `siguiente` dado o al que sigue en SECUENCIA."""
+        if self.estado == self.hasta and siguiente != "REINTENTO":
             self.final = ("fin", f"hasta {self.hasta}")
             self.estado = "FIN"
             self.historial.append((t, "FIN"))
@@ -480,14 +523,21 @@ class Mision:
                     self.saltar_a = None
             else:
                 siguiente = SECUENCIA[SECUENCIA.index(self.estado) + 1]
-        while siguiente in ASCENSOR and not self.cfg.ascensor:
-            siguiente = SECUENCIA[SECUENCIA.index(siguiente) + 1]
         if siguiente == "FIN":
             self.final = ("fin", f"{len(self.entregadas)} frutas entregadas")
             self.estado = "FIN"
             self.historial.append((t, "FIN"))
             return
         self._entrar(siguiente, t)
+
+    def _reintentar(self, t, motivo):
+        """Cerca de la fruta algo salió mal: REINTENTO (se aleja y la vuelve a buscar) o, sin reintentos, fallo."""
+        if self.reintentos >= self.cfg.reintentos:
+            raise Fallo(f"{motivo} (tras {self.reintentos} reintentos)")
+        self.reintentos += 1
+        aviso = f"REINTENTO {self.reintentos} de {self.cfg.reintentos}: {motivo}"
+        self._terminar(t, "REINTENTO")
+        return Salida(self.estado, aviso=aviso)
 
     def _maniobrar(self, t):
         """Ejecuta la cola de maniobras; devuelve (v, w) o None cuando terminaron todas."""
@@ -507,10 +557,11 @@ class Mision:
         return Salida(self.estado, *r)
 
     def _ordenar(self, t, orden):
-        """Estado que da una orden al brazo y espera el resultado. Devuelve (Salida, texto) o (Salida, None) mientras espera."""
-        if self.orden is None:
-            self.orden = orden
+        """Da una orden al brazo (tras `pausa_orden` quieto) y espera el resultado. Devuelve (Salida, texto) o
+        (Salida, None) mientras espera."""
         if not self.orden_emitida:
+            if t - self.t_estado < self.cfg.pausa_orden:
+                return Salida(self.estado), None
             self.orden_emitida = True
             return Salida(self.estado, orden=orden), None
         if self.resultado is None or self.resultado[0] != orden:
@@ -526,18 +577,42 @@ class Mision:
             self._terminar(t)
         return s
 
+    def _ir_a(self, destino, frutas):
+        """Traslado a `destino` (odom) sin tocar las `frutas` conocidas: hoy rectas cerradas con el EKF que las rodean.
+        Aquí entra Nav2 (docs/mision-frutas-plan.md, «Nav2 después»): mismo destino, el estado espera a que llegue."""
+        try:
+            puntos = ruta(self.pose[:2], destino, obstaculos(frutas, self.cfg.margen_ruta))
+        except ValueError as e:
+            raise Fallo(str(e))
+        self.maniobras.extend(Recta(p) for p in puntos)
+
     # --- estados ----------------------------------------------------------------------------------------
     def _e_inicio(self, t):
         c = self.cfg
-        if t - self.t_pose > c.dato_timeout or t - self.t_brazo > c.dato_timeout * 2 or not self.voltajes:
-            return Salida(self.estado)             # espera los datos (falla por tiempo si no llegan)
+        faltan = []
+        if t - self.t_pose > c.dato_timeout:
+            faltan.append("/odometry/filtered (¿robot.launch y EKF?)")
+        if t - self.t_brazo > c.dato_timeout * 2:
+            faltan.append("brazo/estado (¿nodo del brazo y driver con brazo:=true?)")
+        if not self.voltajes or t - self.t_bateria > c.bateria_timeout:
+            faltan.append("/battery_state")
+        cam = self.camara_inicio
+        if cam and t - self.t_camara[cam] > c.camara_timeout:
+            faltan.append(f"{TOPICO[cam]} (detector_frutas con la cámara {cam})")
+        self.faltan = faltan
+        if faltan:
+            return Salida(self.estado, aviso="esperando: " + ", ".join(faltan))
         b, media = self.brazo, self._bateria_media()
         if media < c.bateria_inicio:
             raise Fallo(f"batería baja para empezar: {media:.2f} V (mínimo {c.bateria_inicio} V)")
         if b["congelado"]:
-            raise Fallo("el brazo está congelado")
-        if c.ascensor and not b["calibrado"]:
-            raise Fallo("el ascensor no está calibrado")
+            if b["objeto"]:
+                raise Fallo("el brazo está congelado con una fruta: soltarla a mano "
+                            "(ros2 service call /brazo/soltar std_srvs/srv/Trigger)")
+            # un fallo anterior lo dejó congelado sin fruta: lanzar una misión nueva lo rearma, a la vista en el log
+            s, _ = self._ordenar(t, "rearmar")
+            s.aviso = "el brazo estaba congelado sin fruta: se rearma (abre la pinza)"
+            return s
         con_fruta = self.desde in CON_FRUTA
         if b["objeto"] != con_fruta:
             raise Fallo("el brazo " + ("no lleva" if con_fruta else "ya lleva") + " una fruta")
@@ -554,14 +629,14 @@ class Mision:
                 return pose[:2]
             k = c.d_vista / d
             return (z[0] + k * (pose[0] - z[0]), z[1] + k * (pose[1] - z[1]))
-        self._rectas(punto_vista(self.pose), self.entregadas)
+        self._ir_a(punto_vista(self.pose), self.entregadas)
         self.maniobras.append(Giro(lambda pose: math.atan2(z[1] - pose[1], z[0] - pose[0])))
 
     _e_ir_a_zona = _mover
 
     def _al_entrar_buscar(self, t):
         self.direccion, self.t_quieto, self.candidato, self.acumulado = -1, None, None, []
-        self.base = math.atan2(self.p.zona[1] - self.pose[1], self.p.zona[0] - self.pose[0])
+        self.base = math.atan2(self.centro[1] - self.pose[1], self.centro[0] - self.pose[0])
         self.vistos = set()
         self.mapa = []                             # [tipo, x, y, n]: todas las frutas vistas en la zona
 
@@ -569,7 +644,7 @@ class Mision:
         c = self.cfg
         if self.t_quieto is None or t < self.t_quieto + c.espera_mirar:
             return
-        en_zona = [(tipo, p) for tipo, p in en_odom if math.dist(p, self.p.zona) <= self.p.radio + c.margen_zona]
+        en_zona = [(tipo, p) for tipo, p in en_odom if math.dist(p, self.centro) <= self.radio_busqueda + c.margen_zona]
         self.vistos.update(tipo for tipo, _ in en_zona)
         for tipo, p in en_zona:
             f = next((f for f in self.mapa if f[0] == tipo and math.dist(p, f[1:3]) <= c.agrupar), None)
@@ -584,7 +659,7 @@ class Mision:
         if self.candidato is not None:
             pedidas.sort(key=lambda q: math.dist(q, self.candidato))   # sigue a la misma fruta si sigue ahí
         else:
-            pedidas.sort(key=lambda q: math.dist(q, self.p.zona))
+            pedidas.sort(key=lambda q: math.dist(q, self.centro))
         p = pedidas[0]
         if self.candidato is None or math.dist(p, self.candidato) > c.agrupar:
             self.acumulado = []
@@ -632,11 +707,12 @@ class Mision:
         raise Fallo(f"ninguna dirección deja recoger {self.pedida()} sin tocar las otras {len(self.vecinas)} frutas: "
                     "separarlas (al menos ~17 cm entre centros)")
 
-    def _al_entrar_rodear(self, t):
-        """Si la dirección elegida no es la de ahora, rodea la fruta a d_aproximacion en arcos de 45° como mucho."""
+    def _al_entrar_acercar(self, t):
+        """Si la dirección elegida no es la de ahora, primero rodea la fruta a d_aproximacion en arcos de 45° como
+        mucho; luego se acerca de frente."""
         o, c = self.objetivo, self.cfg
         actual = math.atan2(self.pose[1] - o[1], self.pose[0] - o[0])
-        delta = ang(self.phi - actual)
+        delta = ang(self.phi - actual) if self.phi is not None else 0.0
         if abs(delta) < math.radians(5):
             return
         n = math.ceil(abs(delta) / math.radians(45))
@@ -645,10 +721,11 @@ class Mision:
             self.maniobras.append(Recta((o[0] + c.d_aproximacion * math.cos(a), o[1] + c.d_aproximacion * math.sin(a))))
         self.maniobras.append(Giro(lambda pose: math.atan2(o[1] - pose[1], o[0] - pose[0])))
 
-    _e_rodear = _mover
-
     def _e_acercar(self, t):
         c = self.cfg
+        r = self._maniobrar(t)
+        if r is not None:
+            return Salida(self.estado, *r)
         fx, fy = a_base(self.pose, self.objetivo)
         d, err = math.hypot(fx, fy), math.atan2(fy, fx)
         if abs(d - c.d_parada) <= c.tol_parada:
@@ -661,48 +738,71 @@ class Mision:
         v = limitar(c.k_avance * (d - c.d_parada), c.v_min, c.v_max)
         return Salida(self.estado, v, limitar(c.k_rumbo * err, -c.w_rumbo, c.w_rumbo))
 
-    def _al_entrar_girar_180(self, t):
+    def _al_entrar_girar(self, t):
         o = self.objetivo
         self.maniobras.append(Giro(lambda pose: math.atan2(o[1] - pose[1], o[0] - pose[0]) + math.pi))
 
-    _e_girar_180 = _mover
-
-    def _e_bajar(self, t):
-        return self._orden_simple(t, "bajar")
+    _e_girar = _mover
 
     def _e_abrir(self, t):
         return self._orden_simple(t, "abrir")
 
-    def _al_entrar_alinear(self, t):
-        self.origen_alinear, self.vio_garra, self.t_en_zona = self.pose[:2], False, None
+    def _al_entrar_retroceder(self, t):
+        self.origen = self.pose[:2]
+        self.confirmadas, self.t_vista, self.pose_vista = 0, -math.inf, None
+        self.t_parado, self.primera_garra = None, None
 
-    def _e_alinear(self, t):
+    def _cuadro_garra(self, p, t):
+        """Una detección de cam_garra en odom: corrige la estimación si cae cerca de ella (puerta), si no se ignora
+        (la sombra de un dedo, otra fruta). Sin estimación (--desde=ABRIR), dos cuadros parecidos la fijan."""
         c = self.cfg
-        fresca = self.garra is not None and t - self.t_garra_vista <= c.garra_timeout
-        self.vio_garra |= fresca
-        if self.vio_garra and t - self.t_garra_vista > c.perdida_garra:
-            raise Fallo(f"cam_garra perdió la fruta más de {c.perdida_garra} s")
-        if self.objetivo is None:                  # --desde=ALINEAR sin BUSCAR: solo vale cam_garra
-            if t - self.t_estado > c.sin_garra:
-                raise Fallo("cam_garra no ve la fruta")
-            return Salida(self.estado)
-        if self.cuadros_garra >= c.cuadros:
-            self._terminar(t)
-            return Salida(self.estado)
-        if math.dist(self.pose[:2], self.origen_alinear) > c.retroceso_max:
-            raise Fallo(f"se movió más de {c.retroceso_max} m sin centrar la fruta")
+        if self.objetivo is None:
+            if self.primera_garra and math.dist(p, self.primera_garra) <= 0.03:
+                self.objetivo = ((p[0] + self.primera_garra[0]) / 2, (p[1] + self.primera_garra[1]) / 2)
+            else:
+                self.primera_garra = p
+                return
+        puerta = c.puerta_fina if self.confirmadas >= c.confirmaciones else c.puerta_garra
+        if math.dist(p, self.objetivo) > puerta:
+            return
+        o = self.objetivo
+        self.objetivo = (o[0] + c.k_garra * (p[0] - o[0]), o[1] + c.k_garra * (p[1] - o[1]))
+        self.confirmadas += 1
+        self.t_vista, self.pose_vista = t, self.pose[:2]
+
+    def _e_retroceder(self, t):
+        c = self.cfg
+        if self.objetivo is None:                  # --desde=ABRIR sin BUSCAR: solo vale cam_garra
+            if t - self.t_estado > c.espera_perdida:
+                return self._reintentar(t, "cam_garra no ve la fruta")
+            return Salida(self.estado, aviso="esperando a que cam_garra vea la fruta")
+        if math.dist(self.pose[:2], self.origen) > c.retroceso_max:
+            return self._reintentar(t, f"se movió más de {c.retroceso_max} m sin llegar a la fruta")
         fx, fy = a_base(self.pose, self.objetivo)
+        x0, x1, ancho = c.campo_garra
+        dentro = x0 + c.margen_campo <= fx <= x1 - c.margen_campo and abs(fy) <= ancho - c.margen_campo
+        if t - self.t_vista > c.perdida and dentro:
+            # cam_garra debería verla y no la ve: para y espera; si no vuelve, sigue un trecho corto con la odometría
+            # (ya confirmada, p. ej. al pasar bajo la cámara) o se aleja y la vuelve a buscar
+            self.t_parado = self.t_parado if self.t_parado is not None else t
+            if t - self.t_parado < c.espera_perdida:
+                return Salida(self.estado, aviso="cam_garra no ve la fruta: parado esperando")
+            if self.confirmadas < c.confirmaciones:
+                return self._reintentar(t, f"cam_garra no confirma la fruta ({self.confirmadas} cuadros)")
+            if math.dist(self.pose[:2], self.pose_vista) > c.ciego_max:
+                return self._reintentar(t, f"cam_garra perdió la fruta durante más de {c.ciego_max} m")
+        else:
+            self.t_parado = None
+        fy -= c.y_agarre
         falta = fx - c.x_agarre                    # < 0: la fruta está más atrás que la zona de agarre
         if abs(falta) <= c.tol_agarre_x and abs(fy) <= c.tol_agarre_y:
-            # en la zona según la odometría, pero sin confirmar con cam_garra
-            self.t_en_zona = self.t_en_zona or t
-            if t - self.t_en_zona > c.sin_garra:
-                raise Fallo("en la zona de agarre según la odometría pero cam_garra no confirma la fruta")
-            return Salida(self.estado)
-        self.t_en_zona = None
+            if self.confirmadas >= c.confirmaciones:
+                self._terminar(t)
+                return Salida(self.estado)
+            return Salida(self.estado, aviso="en la zona de agarre: esperando cuadros de cam_garra")
         v = 0.0
         if abs(falta) > c.tol_agarre_x:
-            v = math.copysign(limitar(c.k_alinear * abs(falta), c.v_alinear_min, c.v_alinear), falta)
+            v = math.copysign(limitar(c.k_retro * abs(falta), c.v_retro_min, c.v_retro), falta)
             if abs(fy) > 2 * c.tol_agarre_y:
                 v /= 2                             # muy desviada: corrige el rumbo antes de llegar
         w = limitar(-c.k_lateral * fy, -c.w_lateral, c.w_lateral) if abs(fy) > c.tol_agarre_y / 2 else 0.0
@@ -713,26 +813,37 @@ class Mision:
         if texto == "agarrado":
             self._terminar(t)
         elif texto is not None:
-            self._terminar(t, "REINTENTO")
+            return self._reintentar(t, "sin agarre")
         return s
 
     def _al_entrar_verificar(self, t):
-        self.cuadros_garra = 0                     # solo cuentan los cuadros con la pinza ya cerrada
+        self.vistas_agarre = []
 
     def _e_verificar(self, t):
-        if self.cuadros_garra >= self.cfg.cuadros:
-            self._terminar(t)
-        elif t - self.t_estado > self.cfg.tiempo_verificar:
-            self._terminar(t, "REINTENTO")
-        return Salida(self.estado)
+        """Mira la fruta agarrada con cam_garra y registra dónde la ve: es la zona de agarre real (x/y_agarre)."""
+        c = self.cfg
+        if t - self.t_estado < c.tiempo_verificar:
+            return Salida(self.estado)
+        if not self.brazo["objeto"]:
+            return self._reintentar(t, "el brazo ya no la sostiene")
+        if self.vistas_agarre:
+            xs, ys = sorted(x for x, _ in self.vistas_agarre), sorted(y for _, y in self.vistas_agarre)
+            self.agarre_visto = (xs[len(xs) // 2], ys[len(ys) // 2])
+            aviso = (f"cam_garra ve la fruta agarrada en x={self.agarre_visto[0]:.3f} y={self.agarre_visto[1]:.3f} "
+                     f"({len(xs)} cuadros; x_agarre={c.x_agarre} y_agarre={c.y_agarre})")
+        else:
+            aviso = "cam_garra no ve la fruta agarrada (¿umbrales del detector?)"
+        self._terminar(t)
+        return Salida(self.estado, aviso=aviso)
 
     def _al_entrar_reintento(self, t):
-        if self.reintentos >= self.cfg.reintentos:
-            raise Fallo(f"sin agarre tras {self.reintentos} reintento(s)")
-        self.reintentos += 1
-        self.cuadros_garra = 0
-        k = self.cfg.reintento_avance
-        self.maniobras.append(Recta(lambda pose: (pose[0] + k * math.cos(pose[2]), pose[1] + k * math.sin(pose[2]))))
+        # se aleja de la fruta (avanza: el gripper queda detrás), gira hacia ella y la vuelve a buscar con cam_frutas
+        if self.objetivo is None:
+            self.objetivo = a_odom(self.pose, (self.cfg.x_agarre - 0.10, 0.0))   # donde debería estar
+        o = self.objetivo
+        self.maniobras.extend([Recta(adelante(self.cfg.alejar_reintento)),
+                               Giro(lambda pose: math.atan2(o[1] - pose[1], o[0] - pose[0]))])
+        self.centro, self.radio_busqueda = o, self.cfg.radio_rebusca
 
     def _e_reintento(self, t):
         s, texto = self._ordenar(t, "abrir")
@@ -740,26 +851,14 @@ class Mision:
             return s
         r = self._maniobrar(t)
         if r is None:
-            self._terminar(t, "ALINEAR")
+            self._terminar(t, "BUSCAR")
             return Salida(self.estado)
         return Salida(self.estado, *r)
 
-    def _e_subir(self, t):
-        return self._orden_simple(t, "subir")
-
     def _al_entrar_salir(self, t):
-        k = self.cfg.salida            # en recta: girar junto a las vecinas las barrería con el gripper
-        self.maniobras.append(Recta(lambda pose: (pose[0] + k * math.cos(pose[2]), pose[1] + k * math.sin(pose[2]))))
+        self.maniobras.append(Recta(adelante(self.cfg.salida)))   # en recta: girar junto a las vecinas las barrería
 
     _e_salir = _mover
-
-    def _rectas(self, destino, frutas):
-        """Encola las rectas para ir a `destino` rodeando las `frutas` conocidas."""
-        try:
-            puntos = ruta(self.pose[:2], destino, obstaculos(frutas, self.cfg.margen_ruta))
-        except ValueError as e:
-            raise Fallo(str(e))
-        self.maniobras.extend(Recta(p) for p in puntos)
 
     def _previo(self, i):
         e, n, d = self.entregas[i], self.normal, self.cfg.d_previo
@@ -767,23 +866,16 @@ class Mision:
 
     def _al_entrar_ir_a_entrega(self, t):
         # las que siguen en la zona (vistas en el último BUSCAR) y las ya dejadas en la línea
-        self._rectas(self._previo(self.indice), self.vecinas + self.entregadas)
+        self._ir_a(self._previo(self.indice), self.vecinas + self.entregadas)
 
     _e_ir_a_entrega = _mover
 
-    def _al_entrar_orientar(self, t):
-        self.maniobras.append(Giro(math.atan2(self.normal[1], self.normal[0])))   # el frente lejos de la línea
-
-    _e_orientar = _mover
-
     def _al_entrar_dejar(self, t):
+        # el frente lejos de la línea y marcha atrás hasta que la zona de agarre queda sobre su punto
         e, n, d = self.entregas[self.indice], self.normal, -self.cfg.x_agarre
-        self.maniobras.append(Recta((e[0] + n[0] * d, e[1] + n[1] * d), atras=True))   # la zona de agarre sobre el punto
+        self.maniobras.extend([Giro(math.atan2(n[1], n[0])), Recta((e[0] + n[0] * d, e[1] + n[1] * d), atras=True)])
 
     _e_dejar = _mover
-
-    def _e_bajar_entrega(self, t):
-        return self._orden_simple(t, "bajar")
 
     def _e_soltar(self, t):
         s, texto = self._ordenar(t, "soltar")
@@ -792,12 +884,8 @@ class Mision:
             self._terminar(t)
         return s
 
-    def _e_subir_entrega(self, t):
-        return self._orden_simple(t, "subir")
-
     def _al_entrar_alejar(self, t):
-        k = self.cfg.alejar
-        self.maniobras.append(Recta(lambda pose: (pose[0] + k * math.cos(pose[2]), pose[1] + k * math.sin(pose[2]))))
+        self.maniobras.append(Recta(adelante(self.cfg.alejar)))
 
     _e_alejar = _mover
 
@@ -811,6 +899,7 @@ class Mision:
 
     def _e_siguiente(self, t):
         self.objetivo, self.reintentos = None, 0
+        self.centro, self.radio_busqueda = self.p.zona, self.p.radio
         self.indice += 1
         if self.indice < len(self.p.frutas):
             self._terminar(t, "IR_A_ZONA")
@@ -825,7 +914,7 @@ class Mision:
         home = (0.0, 0.0)
         if any(math.dist(home, e) < self.cfg.d_previo for _, e in self.entregadas):
             home = self._previo(0)
-        self._rectas(home, self.vecinas + self.entregadas)
+        self._ir_a(home, self.vecinas + self.entregadas)
 
     def _e_volver_home(self, t):
         r = self._maniobrar(t)

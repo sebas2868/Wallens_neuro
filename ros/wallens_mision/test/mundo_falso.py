@@ -23,8 +23,9 @@ class Fruta:
 
 class Mundo:
     def __init__(self, frutas, pose=(0.0, 0.0, 0.0), x_agarre=-0.23, semilla=1, ruido_frutas=0.01, ruido_garra=0.003,
-                 cam_x=0.10, fov=math.radians(30), rango=(0.35, 2.0), garra_x=(-0.42, -0.16), garra_y=0.12,
-                 bateria=15.4, t_brazo=1.0, t_ascensor=15.0, ascensor=False):
+                 cam_x=0.10, fov=math.radians(22), rango=(0.30, 2.0), garra_x=(-0.32, -0.18), garra_y=0.065,
+                 bateria=15.4, t_brazo=1.0, t_ascensor=15.0, ascensor=False, perdida_garra=0.0, ciego_garra=None,
+                 sesgo_garra=(0.0, 0.0), prob_tipo=0.0, inicio_bateria=0.0):
         self.frutas = [Fruta(*f) for f in frutas]
         self.x, self.y, self.th = pose
         self.x_agarre = x_agarre
@@ -32,6 +33,13 @@ class Mundo:
         self.ruido_frutas, self.ruido_garra = ruido_frutas, ruido_garra
         self.cam_x, self.fov, self.rango = cam_x, fov, rango
         self.garra_x, self.garra_y = garra_x, garra_y
+        # fallos reales de cam_garra (2026-11-02): cuadros sin fruta (la lima oscura quedaba bajo v_min), una banda de x
+        # donde la fruta pasa bajo la cámara y un sesgo entre lo que ve y dónde está (calibración afín con la fruta)
+        self.perdida_garra, self.ciego_garra, self.sesgo_garra = perdida_garra, ciego_garra, sesgo_garra
+        self.garra_ciega_hasta = -1.0      # t hasta el que cam_garra no ve nada
+        self.detector_caido = math.inf     # t desde el que detector_frutas no publica (proceso caído, cámara suelta)
+        self.prob_tipo = prob_tipo         # cam_frutas cambia el tipo de una fruta en un cuadro
+        self.inicio_bateria = inicio_bateria
         self.bateria = bateria
         self.t_brazo, self.t_ascensor, self.ascensor = t_brazo, t_ascensor, ascensor
         self.pinza_abierta = False
@@ -61,7 +69,10 @@ class Mundo:
             cx = bx - self.cam_x
             d = math.hypot(cx, by)
             if self.rango[0] <= d <= self.rango[1] and abs(math.atan2(by, cx)) <= self.fov:
-                vistas.append((f.tipo, bx + self.rnd.gauss(0, self.ruido_frutas), by + self.rnd.gauss(0, self.ruido_frutas)))
+                tipo = f.tipo
+                if self.rnd.random() < self.prob_tipo:
+                    tipo = "naranja" if tipo == "limon" else "limon"
+                vistas.append((tipo, bx + self.rnd.gauss(0, self.ruido_frutas), by + self.rnd.gauss(0, self.ruido_frutas)))
         for t, tipo, x, y in list(self.falsos):
             if t <= self.t:
                 vistas.append((tipo, x, y))
@@ -70,16 +81,22 @@ class Mundo:
 
     def ver_garra(self):
         """(visible, x, y) de la fruta más cercana a la zona de agarre dentro del campo de cam_garra."""
+        if self.t < self.garra_ciega_hasta or self.rnd.random() < self.perdida_garra:
+            return False, 0.0, 0.0
         mejor = None
         for f in self.frutas:
             bx, by = (self.x_agarre, 0.0) if f.agarrada else a_base(self.pose, (f.x, f.y))
+            if self.ciego_garra and self.ciego_garra[0] <= bx <= self.ciego_garra[1]:
+                continue
             if self.garra_x[0] <= bx <= self.garra_x[1] and abs(by) <= self.garra_y:
                 d = math.hypot(bx - self.x_agarre, by)
                 if mejor is None or d < mejor[0]:
                     mejor = (d, bx, by)
         if mejor is None:
             return False, 0.0, 0.0
-        return True, mejor[1] + self.rnd.gauss(0, self.ruido_garra), mejor[2] + self.rnd.gauss(0, self.ruido_garra)
+        sx, sy = self.sesgo_garra
+        return (True, mejor[1] + sx + self.rnd.gauss(0, self.ruido_garra),
+                mejor[2] + sy + self.rnd.gauss(0, self.ruido_garra))
 
     # --- brazo --------------------------------------------------------------------------------------------
     def ordenar(self, orden):
@@ -90,6 +107,13 @@ class Mundo:
     def _resolver(self, orden):
         if orden in ("bajar", "subir") and not self.ascensor:
             return False, "sin ascensor"
+        if self.congelado and orden not in ("soltar", "rearmar"):
+            return False, f"{orden} rechazada: el brazo está congelado"
+        if orden == "rearmar":
+            if self.agarrada():
+                return False, "rearmar rechazada: lleva una fruta"
+            self.congelado, self.pinza_abierta = False, True
+            return True, "listo"
         if orden == "abrir":
             self.pinza_abierta = True
             return True, "listo"
@@ -134,9 +158,9 @@ class Mundo:
             if paso % 4 == 0:
                 mision.on_brazo(calibrado=self.ascensor, congelado=self.congelado, objeto=self.agarrada() is not None,
                                 ocupado=self.pendiente is not None, t=self.t)
-            if paso % 10 == 0:
+            if paso % 10 == 0 and self.t >= self.inicio_bateria:
                 mision.on_bateria(self.bateria, self.t)
-            if s is not None and paso % n_cam == 0:
+            if s is not None and paso % n_cam == 0 and self.t < self.detector_caido:
                 if s.camara == "frutas":
                     mision.on_frutas(self.ver_frutas(), self.t)
                 elif s.camara == "garra":
