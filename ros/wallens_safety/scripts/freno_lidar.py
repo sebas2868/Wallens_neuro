@@ -12,7 +12,7 @@ import time
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
 
@@ -45,6 +45,10 @@ class FrenoLidar(Node):
         self.estado_publicado = False
         self.create_subscription(LaserScan, "scan", self.on_scan, qos_profile_sensor_data)
         self.create_subscription(Twist, "cmd_vel", self.on_cmd, 10)
+        # transient_local: llega aunque este nodo arranque después. Si wallens_brazo muere con true, las ruedas siguen paradas.
+        self.brazo_ocupado = False
+        self.create_subscription(Bool, "brazo/ocupado", self.on_brazo, QoSProfile(
+            depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL, reliability=ReliabilityPolicy.RELIABLE))
         self.pub = self.create_publisher(Twist, "cmd_vel_safe", 10)
         self.pub_freno = self.create_publisher(Bool, "freno_obstaculo", 1)
         self.create_timer(1 / 30, self.ciclo)
@@ -56,6 +60,11 @@ class FrenoLidar(Node):
 
     def on_scan(self, m):
         self.freno.on_scan(m.ranges, m.angle_min, m.angle_increment, time.monotonic())
+
+    def on_brazo(self, m):
+        if m.data != self.brazo_ocupado:
+            self.get_logger().warn("Brazo ocupado: las ruedas se frenan" if m.data else "Brazo libre: las ruedas obedecen")
+        self.brazo_ocupado = m.data
 
     def on_cmd(self, m):
         if not self.freno.on_cmd(m.linear.x, m.angular.z, time.monotonic()):
@@ -71,7 +80,8 @@ class FrenoLidar(Node):
             self.get_logger().warn(f"Avance anulado: {motivo}", throttle_duration_sec=2.0)
         self.set_freno(bloqueado)
         out = Twist()
-        out.linear.x, out.angular.z = v, w
+        if not self.brazo_ocupado:               # con el brazo ocupado se publica velocidad 0
+            out.linear.x, out.angular.z = v, w
         self.pub.publish(out)
 
     def set_freno(self, estado):
