@@ -15,7 +15,8 @@ Restart=always
 RestartSec=10
 EnvironmentFile=/home/wallens/wallens/config/ros-red.env
 EnvironmentFile=-/home/wallens/.config/wallens/peers.env
-Environment=ROS_LOG_DIR=/run/wallens-log
-RuntimeDirectory=wallens-log
+# Carpeta propia: si compartiera /run/wallens-log, al parar wallens.service systemd la borra mientras esta arranca
+Environment=ROS_LOG_DIR=/run/wallens-mision-log
+RuntimeDirectory=wallens-mision-log
 KillSignal=SIGINT
 TimeoutStopSec=15

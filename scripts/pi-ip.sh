@@ -14,7 +14,8 @@ MACS=("$@")
 buscar() {
   local m
   for m in "${MACS[@]}"; do
-    ip -4 neigh show | awk -v m="${m,,}" 'tolower($3)==m && $NF!="FAILED" {print $1; f=1; exit} END {exit !f}' && return 0
+    # "IP dev IFACE lladdr MAC ESTADO": la MAC es el campo que sigue a lladdr (no un número fijo)
+    ip -4 neigh show | awk -v m="${m,,}" '{for (i = 1; i < NF; i++) if ($i == "lladdr" && tolower($(i+1)) == m && $NF != "FAILED") {print $1; f=1; exit}} END {exit !f}' && return 0
   done
   return 1
 }
