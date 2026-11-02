@@ -154,11 +154,22 @@ Por etapas, de la más corta a la completa; cada una prueba una pieza nueva y el
 
 ```
 ~/wallens/scripts/probar-mision.sh agarre          # limón 33 cm detrás, en el eje: cam_garra + gripper (~20 s)
-X_AGARRE=… Y_AGARRE=… ~/wallens/scripts/probar-mision.sh agarre   # repetir con lo que imprimió VERIFICAR
+~/wallens/scripts/probar-mision.sh agarre          # otra vez: ya usa el x_agarre/y_agarre medido
 ~/wallens/scripts/probar-mision.sh acercar         # limón 1.2 m al frente: cam_frutas, acercarse y girar 180°
 ~/wallens/scripts/probar-mision.sh hasta-agarrar   # lo anterior y agarrarlo
 ~/wallens/scripts/probar-mision.sh                 # completa: lo deja donde arrancó el robot y se aparta
+MAS="-p w_max:=0.45" ~/wallens/scripts/probar-mision.sh acercar   # cualquier campo numérico de Config, sin redesplegar
 ```
+
+**Calibración del agarre, sin copiarla a mano:** una misión que termina bien y vio la fruta agarrada en ≥ 5 cuadros
+guarda dónde la ve `cam_garra` en `~/.config/wallens/agarre.yaml` (en la Pi, fuera de `~/wallens`: el rsync no la
+pisa) y `probar-mision.sh` la carga en las siguientes e imprime qué valores usa; `X_AGARRE`/`Y_AGARRE` mandan sobre
+ella. Cuando sea estable, pasarla a `Config` en el repo. Lo demás de la cámara (umbrales, `garra_x`/`garra_y`, `f`,
+`fila_horizonte`) vive solo en los parámetros de `detector_frutas`; `Config.campo_garra` es lo que esa calibración ve
+del suelo y hay que revisarlo si se recalibra `cam_garra`.
+
+El preflight espera el primer cuadro de cada cámara (abrir tarda 3.5 s `cam_frutas`, 1.3 s `cam_garra`), mide 2 s y
+deja encendida la que la misión usa primero, así `INICIO` no espera a abrirla otra vez.
 
 Para el servicio `wallens` (pide sudo), lanza `mision.launch.py` con `depuracion:=true` si no corre, pasa el
 **preflight** (`scripts/preflight.py`: servicio, una copia de cada nodo, frecuencias, brazo, error de hardware del

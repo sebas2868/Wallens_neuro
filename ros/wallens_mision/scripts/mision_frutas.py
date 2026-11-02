@@ -6,8 +6,11 @@ garra/fruta (JSON de detector_frutas). Salidas: cmd_vel (pasa por el freno LiDAR
 abre detector_frutas: una a la vez, "" = ninguna) y, en un fallo, parada.
 
 Parámetros: zona_x, zona_y, radio, frutas ("limon,naranja"), entrega_x, entrega_y, angulo_linea, separacion,
-volver_home, desde, hasta (estados de SECUENCIA, "" = sin límite), x_agarre, y_agarre, hz y relativo: true (por
-defecto) = zona, entrega y línea respecto al robot al lanzar la misión (entrega 0, 0 = donde está); false = en odom.
+volver_home, desde, hasta (estados de SECUENCIA, "" = sin límite), hz, relativo: true (por defecto) = zona, entrega y
+línea respecto al robot al lanzar la misión (entrega 0, 0 = donde está); false = en odom. Además cada campo numérico
+de mision_logica.Config con su nombre (x_agarre, v_max, w_max, tol_agarre_x...): se ajustan sin tocar código.
+Calibración: si VERIFICAR vio la fruta agarrada en >= 5 cuadros, al terminar bien guarda x_agarre/y_agarre en
+~/.config/wallens/agarre.yaml (formato --params-file); scripts/probar-mision.sh lo carga en la siguiente misión.
 Ejemplo, recoger el limón que está 1.2 m al frente y dejarlo donde arrancó (lo que hace scripts/probar-mision.sh):
   ros2 run wallens_mision mision_frutas.py --ros-args -p frutas:=limon -p zona_x:=1.2 -p angulo_linea:=1.5708"""
 import json
@@ -15,6 +18,7 @@ import math
 import os
 import sys
 import time
+from dataclasses import fields
 
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -40,7 +44,7 @@ class NodoMision(Node):
                         frutas=[f.strip() for f in p("frutas", "limon").split(",") if f.strip()],
                         entrega=(p("entrega_x", 0.0), p("entrega_y", 0.0)), angulo_linea=p("angulo_linea", 0.0),
                         separacion=p("separacion", 0.25), volver_home=p("volver_home", False))
-        cfg = Config(x_agarre=p("x_agarre", -0.23), y_agarre=p("y_agarre", 0.0))
+        cfg = Config(**{c.name: p(c.name, c.default) for c in fields(Config) if type(c.default) in (int, float)})
         desde, hasta = p("desde", "") or None, p("hasta", "") or None
         Mision(pedido, cfg, desde=desde, hasta=hasta)            # valida el pedido ya, antes de esperar la pose
         if p("relativo", True):                                  # se crea con la primera pose (_al_odom)
@@ -154,9 +158,23 @@ class NodoMision(Node):
             self.get_logger().info("historial: " + " > ".join(e for _, e in self.mision.historial))
             if self.mision.agarre_visto:
                 x, y = self.mision.agarre_visto
-                self.get_logger().info(f"fruta agarrada vista por cam_garra en x={x:.3f} y={y:.3f}: usar como "
-                                       f"-p x_agarre:={x:.3f} -p y_agarre:={y:.3f} si difiere de lo configurado")
+                self.get_logger().info(f"fruta agarrada vista por cam_garra en x={x:.3f} y={y:.3f} "
+                                       f"(configurado x_agarre={self.mision.cfg.x_agarre} y_agarre={self.mision.cfg.y_agarre})")
+                if s.fin[0] == "fin" and len(self.mision.vistas_agarre) >= 5:
+                    self.get_logger().info(f"calibración guardada en {guardar_agarre(x, y)}: la próxima misión la usa")
             self.salir = True
+
+
+AGARRE = os.path.expanduser("~/.config/wallens/agarre.yaml")
+
+
+def guardar_agarre(x, y, ruta=AGARRE):
+    """Dónde ve cam_garra la fruta agarrada, como parámetros de este nodo (ros2 run ... --params-file)."""
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+    with open(ruta, "w") as f:
+        f.write(f"# medido por VERIFICAR el {time.strftime('%Y-%m-%d %H:%M')} (mision_frutas.py)\n"
+                f"mision_frutas:\n  ros__parameters:\n    x_agarre: {x:.3f}\n    y_agarre: {y:.3f}\n")
+    return ruta
 
 
 def main():

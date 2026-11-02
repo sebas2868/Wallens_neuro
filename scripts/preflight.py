@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Antes de lanzar la misión de frutas: comprueba en la Pi que todo está como debe y dice exactamente qué falta.
-No mueve motores: lee el error de hardware del gripper por brazo/transaccion y enciende cada cámara 4 s (tópico camara).
+No mueve motores: lee el error de hardware del gripper por brazo/transaccion y enciende cada cámara unos segundos
+(tópico camara).
 
   servicio wallens parado, una sola copia de cada nodo y ninguna misión corriendo
   /odometry/filtered, /odom, /scan, /battery_state y brazo/estado con su frecuencia
   brazo: no congelado (o se rearma al lanzar), sin fruta, sin error de hardware en el gripper (registro 70)
-  cámaras: detector_frutas publica con cada una y cuánto ve la fruta cam_garra
+  cámaras: detector_frutas publica con cada una, cuánto tarda en abrirla y cuánto ve la fruta cam_garra
   batería: media >= 14.6 V (lo que exige INICIO)
   CPU de cada nodo durante la comprobación
 
 Uso (con mision.launch.py corriendo):  source ~/wallens/scripts/ros-env.sh && python3 ~/wallens/scripts/preflight.py
+  [--dejar frutas|garra]   esa cámara queda encendida al final (la primera que usará la misión)
 Sale con 1 si algo impide la misión."""
 import json
 import os
@@ -97,6 +99,7 @@ def revisar_sistema():
 
 
 def main():
+    dejar = sys.argv[2] if sys.argv[1:2] == ["--dejar"] and len(sys.argv) > 2 else ""
     encontrados = revisar_sistema()
     pids = {p: n for n, ps in encontrados.items() for p in ps}
     cpu0, t_cpu0 = cpu(pids), time.monotonic()
@@ -155,23 +158,33 @@ def main():
             ok(f"gripper en {e.pos_pinza}, corriente {e.corriente_pinza}, {e.voltaje:.1f} V, {e.temperatura_max} °C")
     revisar_hardware(nodo)
 
-    print("== cámaras (una a la vez, 4 s cada una)")
-    for cam in ("frutas", "garra"):
+    # una a la vez; abrir tarda (3.4 s cam_frutas, 1.4 s cam_garra): espera el primer cuadro y luego mide 2 s. La que
+    # usa primero la misión va al final y queda encendida (--dejar): la misión no espera a abrirla otra vez
+    print("== cámaras (una a la vez)")
+    for cam in sorted(("frutas", "garra"), key=lambda c: c == dejar):
         detecciones[cam].clear()
+        t0 = time.monotonic()
         pub_camara.publish(String(data=cam))
-        girar(4.0)
+        while not detecciones[cam] and time.monotonic() - t0 < 8.0:
+            rclpy.spin_once(nodo, timeout_sec=0.05)
+        abrir = time.monotonic() - t0
+        if not detecciones[cam]:
+            falta(f"cam_{cam}: detector_frutas no publica en 8 s", "ver el log de detector_frutas (¿/dev/cam_" + cam + "?)")
+            continue
+        detecciones[cam].clear()
+        girar(2.0)
         d = detecciones[cam]
-        if not d:
-            falta(f"cam_{cam}: detector_frutas no publica", "ver el log de detector_frutas (¿/dev/cam_" + cam + "?)")
-        elif cam == "garra":
+        texto = f"cam_{cam}: abre en {abrir:.1f} s, {len(d) / 2:.1f} Hz"
+        if cam == "garra":
             vistos = [x for x in d if x["visible"]]
-            ok(f"cam_garra: {len(d) / 4:.1f} Hz, ve fruta en {len(vistos)}/{len(d)} cuadros"
+            ok(f"{texto}, ve fruta en {len(vistos)}/{len(d)} cuadros"
                + (f" (x {vistos[-1]['x']:.3f}, y {vistos[-1]['y']:.3f}, {vistos[-1]['tipo']})" if vistos else ""))
         else:
             ultimas = [f for x in d[-3:] for f in x["frutas"]]
-            ok(f"cam_frutas: {len(d) / 4:.1f} Hz, en los últimos cuadros: "
+            ok(f"{texto}, en los últimos cuadros: "
                + (", ".join(f"{f['tipo']} x={f['x']:.2f} y={f['y']:.2f}" for f in ultimas) or "ninguna fruta"))
-    pub_camara.publish(String(data=""))
+    if not dejar:
+        pub_camara.publish(String(data=""))
     girar(0.3)
 
     print("== batería")
@@ -188,7 +201,7 @@ def main():
     hz = os.sysconf("SC_CLK_TCK")
     for p, nombre in pids.items():
         if p in cpu0 and p in cpu1:
-            print(f"  {nombre:24s} {100 * (cpu1[p] - cpu0[p]) / hz / dt:5.1f} %  (las cámaras estuvieron encendidas 8 s)")
+            print(f"  {nombre:24s} {100 * (cpu1[p] - cpu0[p]) / hz / dt:5.1f} %  (con las cámaras ~9 s de {dt:.0f} s)")
     nodo.destroy_node()
     rclpy.shutdown()
 

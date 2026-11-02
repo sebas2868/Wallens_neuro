@@ -2,7 +2,7 @@
 # La prueba real de la misión de frutas en un comando, en la Pi, por etapas de la más corta a la completa. Espacio
 # despejado y una persona junto al interruptor.
 #   agarre         limón 33 cm DETRÁS del centro de las ruedas, en el eje: abre, retrocede con cam_garra, cierra y
-#                  verifica (~20 s). Prueba cam_garra y el gripper, y da el x_agarre/y_agarre real al final
+#                  verifica (~20 s). Prueba cam_garra y el gripper, y mide x_agarre/y_agarre (ver abajo)
 #   acercar        limón 1.2 m al FRENTE (±10 cm): lo busca con cam_frutas, se acerca y gira 180°; sin brazo
 #   hasta-agarrar  como acercar y luego lo agarra (hasta VERIFICAR)
 #   completa       lo agarra, lo deja donde arrancó el robot y se aparta (por defecto)
@@ -13,19 +13,26 @@
 #   3. la misión, con todo el registro en ~/.cache/wallens/mision-<fecha>/ (y los cuadros de las cámaras en
 #      ~/.cache/wallens/detector/)
 # Uso: ~/wallens/scripts/probar-mision.sh [agarre|acercar|hasta-agarrar|completa]
-#      X_AGARRE=-0.215 Y_AGARRE=0.004 ~/wallens/scripts/probar-mision.sh ...   con lo que imprimió una etapa anterior
+# Calibración: una misión que agarra bien guarda dónde ve cam_garra la fruta agarrada en ~/.config/wallens/agarre.yaml
+# y las siguientes lo cargan solas (se imprime). Para forzar otros: X_AGARRE=-0.215 Y_AGARRE=0.004 probar-mision.sh ...
+# Cualquier otro campo de Config se pasa igual: MAS="-p v_max:=0.12 -p w_max:=0.45" probar-mision.sh ...
 # Para parar el launch al acabar: kill del PID que se imprime (el gripper sostiene la fruta si quedó agarrada).
 set -eo pipefail   # sin -u: el setup.bash de ROS usa variables sin definir
 source ~/wallens/scripts/ros-env.sh       # ROS, el workspace y la red del robot (dominio 37), como el servicio
 ETAPA=${1:-completa}
 case $ETAPA in
-  agarre)        PARAMS="-p zona_x:=-0.33 -p entrega_x:=1.2 -p desde:=ABRIR -p hasta:=VERIFICAR" ;;
-  acercar)       PARAMS="-p zona_x:=1.2 -p hasta:=GIRAR" ;;
-  hasta-agarrar) PARAMS="-p zona_x:=1.2 -p hasta:=VERIFICAR" ;;
-  completa)      PARAMS="-p zona_x:=1.2" ;;
+  agarre)        PARAMS="-p zona_x:=-0.33 -p entrega_x:=1.2 -p desde:=ABRIR -p hasta:=VERIFICAR" CAMARA=garra ;;
+  acercar)       PARAMS="-p zona_x:=1.2 -p hasta:=GIRAR" CAMARA=frutas ;;
+  hasta-agarrar) PARAMS="-p zona_x:=1.2 -p hasta:=VERIFICAR" CAMARA=frutas ;;
+  completa)      PARAMS="-p zona_x:=1.2" CAMARA=frutas ;;
   *) echo "etapa desconocida: $ETAPA (agarre | acercar | hasta-agarrar | completa)"; exit 2 ;;
 esac
-PARAMS+=" -p frutas:=limon -p angulo_linea:=1.5708${X_AGARRE:+ -p x_agarre:=$X_AGARRE}${Y_AGARRE:+ -p y_agarre:=$Y_AGARRE}"
+AGARRE=~/.config/wallens/agarre.yaml
+if [ -f "$AGARRE" ]; then                 # --params-file primero: los -p de después mandan sobre él
+  PARAMS="--params-file $AGARRE $PARAMS"
+  echo "calibración de $AGARRE: $(grep -o '[xy]_agarre: [-0-9.]*' "$AGARRE" | tr '\n' ' ')"
+fi
+PARAMS+=" -p frutas:=limon -p angulo_linea:=1.5708${X_AGARRE:+ -p x_agarre:=$X_AGARRE}${Y_AGARRE:+ -p y_agarre:=$Y_AGARRE} ${MAS:-}"
 LOG=~/.cache/wallens/mision-$(date +%Y%m%d-%H%M%S)-$ETAPA
 mkdir -p "$LOG"
 trap 'echo "Registro: $LOG"' EXIT          # también si algo falla o tras Ctrl+C
@@ -42,7 +49,7 @@ if ! pgrep -x detector_frutas >/dev/null; then
 fi
 
 for intento in 1 2 3 4; do
-  if python3 ~/wallens/scripts/preflight.py > "$LOG/preflight.txt" 2>&1; then
+  if python3 ~/wallens/scripts/preflight.py --dejar $CAMARA > "$LOG/preflight.txt" 2>&1; then
     break
   fi
   [ $intento = 4 ] && { cat "$LOG/preflight.txt"; echo "Preflight sin pasar: no se mueve nada."; exit 1; }
