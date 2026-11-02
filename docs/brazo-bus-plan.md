@@ -202,7 +202,7 @@ Ningún paso 1–5 mueve un motor. Los pasos 1–5 se pueden hacer con tests; el
 
 ## Estado (2026-11-01, noche)
 
-Pasos 1–4 hechos y probados sin motores; el 5 y el 6 siguen pendientes.
+Pasos 1–5 hechos; el 6 está en curso (primera verificación en el robot hecha, ver abajo).
 
 | Paso | Estado |
 |---|---|
@@ -210,6 +210,16 @@ Pasos 1–4 hechos y probados sin motores; el 5 y el 6 siguen pendientes.
 | 2 `wallens_interfaces` | `5464ab7` y `48f4f2c`; compila en la Pi (workspace aparte `~/ws_interfaces`) |
 | 3 `BusBrazo` + servicio | `48f4f2c`: 18 tests gtest (también con ThreadSanitizer y ASan/UBSan en el PC), driver compila en la Pi, `brazo_habilitado: false` |
 | 4 `BusRos` + `leer_bloque` | 46 tests de Python (`cd scripts && python3 -m unittest brazo.test_brazo`) |
+| 5 nodo `wallens_brazo` | `f14e213`; interbloqueo `brazo/ocupado` en `wallens_safety` (sin commit, mezclado con cambios previos) |
+| 6 verificación en el robot | parcial, ver abajo |
+
+Verificación del 2026-11-01 (noche), driver de `~/ws_interfaces` lanzado a mano con `brazo_habilitado:=true`, ruedas en
+el aire y **sin SCHED_FIFO** (el shell no puede pedirlo): etapa 2 del gripper por `--bus=sdk` y por `--bus=ros`, ambas
+PASAN (2 ciclos en vacío, "sin contacto"). `bus/diagnostico` tras la corrida ros: 204 transacciones, 0 rechazadas, cola 0,
+tiempo de bus máximo 9.3 ms (media 8.8 ms, dentro de los 12 ms), 0 ciclos atrasados, 0 tardíos. Driver nuevo instalado en
+`~/ros_ws` (respaldo del anterior en `~/respaldo-install-wallens_driver`); el servicio systemd aún corre el binario viejo
+hasta reiniciarlo. Pendiente: latencia de extremo a extremo, marca 0xCA11, watchdog en modo 5, baudrate, repetir con
+SCHED_FIFO bajo systemd.
 
 Desviaciones respecto al plan, ya aplicadas:
 
