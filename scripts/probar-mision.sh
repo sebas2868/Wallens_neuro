@@ -51,10 +51,19 @@ if [ -n "$launch" ]; then
   if ! pgrep -x detector_frutas >/dev/null || ! pgrep -x wallens_driver >/dev/null || ! pgrep -f nodo-brazo.py >/dev/null \
      || [ "$(stat -c %Y "$detector")" -gt "$inicio" ]; then
     echo "relanzo mision.launch.py (PID $launch): le falta un nodo o el detector es más nuevo"
-    kill -INT "$launch"
-    for _ in $(seq 30); do kill -0 "$launch" 2>/dev/null || break; sleep 0.5; done
+    # TERM, no INT: lanzado en segundo plano desde un script, ros2 launch hereda SIGINT ignorado y no se paraba; y a
+    # todo su grupo (setsid): con TERM el launch sale enseguida y dejaba a sus nodos huérfanos
+    grupo=$(ps -o pgid= -p "$launch" | tr -d ' ')
+    kill -TERM -- "-$grupo"
+    for _ in $(seq 40); do pgrep -g "$grupo" >/dev/null || break; sleep 0.5; done
     launch=""
   fi
+fi
+# nunca dos drivers en el bus: si queda uno de un launch anterior, no se lanza otro
+if [ -z "$launch" ] && pgrep -x wallens_driver >/dev/null; then
+  echo "Sigue corriendo un wallens_driver (PID $(pgrep -x wallens_driver | tr '\n' ' ')) de un launch anterior:"
+  echo "  pararlo con: kill -TERM $(pgrep -f 'ros2 launch' | tr '\n' ' ')$(pgrep -x wallens_driver | tr '\n' ' ')"
+  exit 1
 fi
 if [ -z "$launch" ]; then
   setsid nohup ros2 launch ~/wallens/launch/mision.launch.py depuracion:=true > "$LOG/launch.log" 2>&1 &
