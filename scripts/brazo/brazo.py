@@ -84,7 +84,11 @@ class Config:
     corriente_reposo_p: int = 30     # tras abrir (~80 mA): con la corriente de apertura la pinza oscilaba por el juego
     corriente_cierre: int = 80       # medir_cierre: cierra en vacío con poca fuerza (~215 mA) hasta juntar los dedos
     cierre_extra: int = 150          # ticks más allá de CERRADA que medir_cierre puede buscar
-    margen_dedos: int = 15           # contacto a menos de esto del cierre medido = dedos juntos, no un objeto
+    margen_dedos: int = 15           # contacto a menos de esto del cierre medido = dedos juntos, no un objeto;
+                                     # el tope de apriete queda ahí, para no volver a apretar los dedos entre sí
+    retiro_dedos: int = 20           # ticks que se abre tras juntar los dedos, para soltar la presión
+    gracia_p: float = 0.5            # s al empezar a mover la pinza sin vigilar la corriente: el despegue de los
+                                     # dedos juntos pasó de 100 (2026-11-02) y al reintentar abrió bien
     tiempo_apriete: float = 6        # s máximos apretando después del contacto
     paso_apriete: int = 2            # ticks que avanza la meta por lectura
     fraccion_desliz: float = 0.5     # corriente bajo esta fracción del apriete, ya apretado = se escapa
@@ -314,7 +318,8 @@ class Brazo:
     def medir_cierre(self):
         """Cierra en vacío, despacio y con poca corriente, hasta que los dedos se juntan. Desde ahí el apriete puede
         llegar hasta ese punto (frutas chicas como el limón no tocaban antes de CERRADA - MARGEN_PINZA) y un contacto
-        a menos de `margen_dedos` de él es "dedos juntos", no un objeto. Deja la pinza cerrada; devuelve la posición."""
+        a menos de `margen_dedos` de él es "dedos juntos", no un objeto. Deja la pinza casi cerrada, sin presión;
+        devuelve la posición."""
         c = self.cfg
         limite = CERRADA + c.cierre_extra
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
@@ -333,11 +338,15 @@ class Brazo:
                 raise AbortoSuave(f"La pinza llegó a {limite} sin juntar los dedos: revisar a mano")
             if self.reloj.ahora() - inicio > c.tiempo_max_p:
                 raise AbortoSuave(f"La pinza no juntó los dedos en {c.tiempo_max_p} s")
-        self._escribir(PINZA, POS_META, 4, actual)      # deja de empujar
+        self._escribir(PINZA, POS_META, 4, actual - c.retiro_dedos)    # deja de empujar y suelta la presión
         if actual < CERRADA - 4 * MARGEN_PINZA:
             raise AbortoSuave(f"Los dedos se detuvieron en {actual}, lejos del cierre medido ({CERRADA}): "
                               "¿algo entre los dedos?")
-        self.cerrada = self.tope_apriete = actual
+        fin = self.reloj.ahora() + 1.0
+        while self._pos(PINZA) > actual - c.retiro_dedos + c.llegada_p and self.reloj.ahora() < fin:
+            self._dormir(c.periodo)
+            self._vigilar()
+        self.cerrada, self.tope_apriete = actual, actual - c.margen_dedos
         self.log(f"    los dedos se juntan en {actual} (antes el cierre llegaba hasta {CERRADA - MARGEN_PINZA})")
         return actual
 
@@ -351,7 +360,8 @@ class Brazo:
         while abs(self._pos(PINZA) - destino) > c.llegada_p:
             self._dormir(c.periodo)
             self._vigilar()
-            mala = mala + 1 if abs(self._corriente(PINZA)) > c.corriente_aborto_p else 0
+            alta = abs(self._corriente(PINZA)) > c.corriente_aborto_p and self.reloj.ahora() - inicio > c.gracia_p
+            mala = mala + 1 if alta else 0
             if mala >= c.lecturas_aborto:
                 raise AbortoSuave(f"Corriente de la pinza > {c.corriente_aborto_p}: algo la frena")
             if self.reloj.ahora() - inicio > c.tiempo_max_p:

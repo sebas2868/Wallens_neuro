@@ -186,7 +186,8 @@ class TestGripper(Base):
         b.abrir()
         cerrada = b.medir_cierre()
         self.assertAlmostEqual(cerrada, 3900, delta=5)     # el tope de los dedos del bus falso
-        self.assertEqual(b.tope_apriete, cerrada)
+        self.assertEqual(b.tope_apriete, cerrada - Config().margen_dedos)
+        self.assertLessEqual(self.bus.pinza.pos, cerrada - Config().retiro_dedos + 4)   # sin presión entre los dedos
         b.abrir()
         self.assertIsNone(b.cerrar_y_apretar())            # en vacío: dedos juntos, no un objeto
         b.abrir()

@@ -6,7 +6,8 @@ tornillo (ID 3, roto). En una sola corrida:
   G3  por cada fruta, cierra con corriente de apriete creciente hasta que la sostiene firme (tú lo dices).
   G4  sostiene 5 s vigilando que no resbale.
   G5  la suelta.
-Resultado: la corriente mínima que sostiene cada fruta y si la marcó, en ~/.cache/wallens/pinza-frutas.json.
+Resultado: la corriente mínima que sostiene cada fruta y si la marcó, en ~/.cache/wallens/pinza-frutas-<fecha>.json
+(se guarda tras cada fruta: un Ctrl+C no pierde lo ya medido).
 
 Uso (en la Pi, servicio parado):  python3 scripts/prueba-pinza-frutas.py [limon naranja mandarina] [--bus=sdk|ros]
 Fruta en el suelo entre los dedos abiertos y la mano fuera antes de cada Enter. Ctrl+C apaga el torque."""
@@ -24,7 +25,7 @@ _opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and
 FRUTAS = [a for a in sys.argv[1:] if not a.startswith("--")] or ["limon", "naranja", "mandarina"]
 MODO_BUS = _opts.get("bus", "sdk")
 CAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibracion-tornillo.json")
-SALIDA = os.path.expanduser("~/.cache/wallens/pinza-frutas.json")
+SALIDA = os.path.expanduser(time.strftime("~/.cache/wallens/pinza-frutas-%Y%m%d-%H%M%S.json"))   # una por corrida
 ESCALONES = (200, 300, 450, 625)    # corriente de apriete (2.69 mA por unidad); 625 es la de recoger()
 SOSTEN = 5.0                        # s sosteniendo la fruta
 
@@ -98,6 +99,12 @@ def g345(b, fruta, preguntar=preguntar):
     return reg
 
 
+def guardar(resultados):
+    os.makedirs(os.path.dirname(SALIDA), exist_ok=True)
+    with open(SALIDA, "w") as f:
+        json.dump(resultados, f, indent=2, ensure_ascii=False)
+
+
 def main():
     if MODO_BUS == "sdk" and servicio_activo():
         sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
@@ -124,6 +131,7 @@ def main():
         if not falla:
             for fruta in FRUTAS:
                 resultados["frutas"].append(g345(b, fruta))
+                guardar(resultados)
     except KeyboardInterrupt:
         print("\nCancelado")
     except AbortoSuave as e:
@@ -146,9 +154,7 @@ def main():
             cerrar_bus()
         except Exception:
             pass
-        os.makedirs(os.path.dirname(SALIDA), exist_ok=True)
-        with open(SALIDA, "w") as f:
-            json.dump(resultados, f, indent=2, ensure_ascii=False)
+        guardar(resultados)
         print(f"\nResumen ({SALIDA}):")
         for r in resultados["frutas"]:
             ultimo = r["intentos"][-1] if r["intentos"] else {}
