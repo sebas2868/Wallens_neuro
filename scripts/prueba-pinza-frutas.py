@@ -2,9 +2,9 @@
 """Fase G del plan de la misión (docs/mision-frutas-plan.md): el gripper (ID 5) con las frutas reales, sin tocar el
 tornillo (ID 3, roto). En una sola corrida:
   G0  cierra en vacío con poca fuerza y mide dónde se juntan los dedos: ese es el nuevo límite de cierre (el limón es chico).
-  G1  abre y cierra en vacío 2 veces: el cierre tiene que decir "sin contacto"/"dedos juntos"; abierta no debe oscilar.
-  G3  por cada fruta, cierra con corriente de apriete creciente hasta que la sostiene firme (tú lo dices).
-  G4  sostiene 5 s vigilando que no resbale.
+  G1  abre y cierra en vacío una vez: el cierre tiene que decir "sin contacto"/"dedos juntos"; abierta no debe oscilar.
+  G3  por cada fruta (se pone UNA vez), cierra con corriente de apriete creciente hasta que la sostiene firme.
+  G4  sostiene 2 s vigilando que no resbale; una sola pregunta: s firme / n floja / m firme pero marcada.
   G5  la suelta.
 Resultado: la corriente mínima que sostiene cada fruta y si la marcó, en ~/.cache/wallens/pinza-frutas-<fecha>.json
 (se guarda tras cada fruta: un Ctrl+C no pierde lo ya medido).
@@ -27,7 +27,7 @@ MODO_BUS = _opts.get("bus", "sdk")
 CAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibracion-tornillo.json")
 SALIDA = os.path.expanduser(time.strftime("~/.cache/wallens/pinza-frutas-%Y%m%d-%H%M%S.json"))   # una por corrida
 ESCALONES = (200, 300, 450, 625)    # corriente de apriete (2.69 mA por unidad); 625 es la de recoger()
-SOSTEN = 5.0                        # s sosteniendo la fruta
+SOSTEN = 2.0                        # s sosteniendo la fruta
 
 
 def servicio_activo():
@@ -64,38 +64,41 @@ def sostener(b, fuerza, segundos):
 
 
 def g1(b, preguntar=preguntar):
-    for i in (1, 2):
-        b.abrir()
-        if b.cerrar_y_apretar() is not None:
-            return f"ciclo {i}: cerró en vacío y dijo que agarró algo"
     b.abrir()
-    if preguntar(b, "  Mira la pinza abierta 3 s. ¿Quedó quieta, sin oscilar? (s/n) ") != "s":
+    if b.cerrar_y_apretar() is not None:
+        return "cerró en vacío y dijo que agarró algo"
+    b.abrir()
+    if preguntar(b, "  ¿La pinza abierta quedó quieta, sin oscilar? (Enter = sí, n = no) ") == "n":
         return "la pinza abierta oscila"
     return None
 
 
 def g345(b, fruta, preguntar=preguntar):
-    """Sube la corriente hasta que la persona dice que la sostiene firme. Devuelve el registro de la fruta."""
+    """Sube la corriente hasta que la persona dice que la sostiene firme; la fruta se pone una sola vez (al abrir
+    entre escalones queda donde estaba). Devuelve el registro de la fruta."""
     reg = {"fruta": fruta, "intentos": []}
+    b.abrir()
+    preguntar(b, f"\n[{fruta}] pon la fruta en el suelo entre los dedos, mano fuera, Enter... ")
     for corriente in ESCALONES:
         b.cfg.corriente_apriete = corriente
         b.cfg.corriente_agarre = min(corriente + 40, b.cfg.limite_corriente_p - 20)
-        b.abrir()
-        preguntar(b, f"\n[{fruta}, corriente {corriente}] pon la fruta en el suelo entre los dedos, mano fuera, Enter... ")
         fuerza = b.cerrar_y_apretar()
         intento = {"corriente": corriente, "agarre": fuerza is not None}
         if fuerza is not None:
             resbalo, minima = sostener(b, fuerza, SOSTEN)
             intento.update(resbalo=resbalo, corriente_min_sosten=minima, pos=fuerza)
             if not resbalo:
-                intento["firme"] = preguntar(b, "  ¿La sostiene firme si la jalas suave con la mano? (s/n) ") == "s"
-                intento["marcada"] = preguntar(b, "  Suéltala de la mano. ¿Se marcó o se aplastó? (s/n) ") == "s"
+                r = preguntar(b, f"  [{corriente}] jálala suave: Enter/s = firme, n = floja, m = firme pero marcada ")
+                intento["firme"] = r in ("", "s", "m")
+                intento["marcada"] = r == "m"
         print(f"  -> {intento}")
         reg["intentos"].append(intento)
         b.abrir()                                   # G5: suelta
         if intento.get("firme"):
             reg["corriente_minima"] = corriente
             break
+        if fuerza is None:
+            preguntar(b, "  No la tocó: acomódala entre los dedos y Enter... ")
     return reg
 
 

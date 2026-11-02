@@ -27,7 +27,7 @@ class Motor:
         self.disparado = False                 # watchdog disparado
         self.ultima_com = 0.0
         self.encajado = False
-        self.objeto = None                     # {"contacto": ticks, "rigidez": corriente por tick}
+        self.objeto = None                     # {"contacto": ticks, "rigidez": corriente por tick[, "kp": control P]}
         self.min_visto = self.max_visto = float(pos)
 
     def avanzar(self, dt, t):
@@ -58,6 +58,9 @@ class Motor:
             cur = limite_c
         if self.objeto and nuevo > self.objeto["contacto"]:
             equilibrio = self.objeto["contacto"] + limite_c / self.objeto["rigidez"]
+            if "kp" in self.objeto:            # control P: cerca de la meta empuja poco y se detiene antes
+                kp, rig = self.objeto["kp"], self.objeto["rigidez"]
+                equilibrio = min(equilibrio, (rig * self.objeto["contacto"] + kp * meta) / (rig + kp))
             if nuevo >= equilibrio:
                 nuevo = equilibrio
             cur = min(limite_c, self.objeto["rigidez"] * (nuevo - self.objeto["contacto"]))

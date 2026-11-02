@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 
-from brazo import AbortoDuro, AbortoSuave, Brazo, BusRos, Cero, Config, ErrorBus, PINZA, TORNILLO
+from brazo import APRIETE_FRUTA, AbortoDuro, AbortoSuave, Brazo, BusRos, Cero, Config, ErrorBus, PINZA, TORNILLO
 from brazo.falso import BusFalso
 
 CAL = {"abajo": 24245, "arriba": -13399, "abajo_util": 24245, "arriba_util": -11517, "sentido_abajo": 1}
@@ -193,6 +193,28 @@ class TestGripper(Base):
         b.abrir()
         self.bus.pinza.objeto = {"contacto": 3820, "rigidez": 20}  # más chica que el cierre viejo (3791)
         self.assertIsNotNone(b.cerrar_y_apretar())
+
+    def test_dedos_que_se_tocan_antes_del_tope_son_dedos_juntos(self):
+        # 2026-11-02: tras medir 3891 la pinza en vacío se detuvo antes del tope con poca corriente y esperó 10 s
+        b = self.listo(calibrado=False)
+        b.abrir()
+        cerrada = b.medir_cierre()
+        b.abrir()
+        self.bus.pinza.objeto = {"contacto": cerrada - 40, "rigidez": 3, "kp": 3}   # dedos: se detienen sin fuerza
+        t0 = self.bus.t
+        self.assertIsNone(b.cerrar_y_apretar())
+        self.assertLess(self.bus.t - t0, 6)
+
+    def test_cerrar_fruta_usa_su_apriete(self):
+        b = self.listo(calibrado=False)
+        b.abrir()
+        self.bus.pinza.objeto = dict(OBJETO)
+        vistas = []
+        original = b._corriente
+        b._corriente = lambda i: vistas.append(original(i)) or vistas[-1]
+        self.assertIsNotNone(b.cerrar_fruta("limon"))
+        self.assertLess(max(vistas), APRIETE_FRUTA["naranja"])    # no aprieta el limón como a la naranja
+        self.assertEqual(b.cfg.corriente_apriete, Config().corriente_apriete)   # deja la config como estaba
 
     def test_medir_cierre_con_algo_entre_los_dedos_aborta(self):
         b = self.listo(calibrado=False)

@@ -17,6 +17,9 @@ TORNILLO, PINZA = 3, 5
 MODELO = 1030                       # XM430-W210
 MARCA_ADDR, MARCA = 222, 0xCA11     # Indirect Address 28: RAM sin uso; vuelve a su valor por defecto sin los 12 V
 ABIERTA, CERRADA, MARGEN_PINZA = 2794, 3851, 60   # recorrido medido del gripper (test-gripper.py)
+# corriente de apriete por fruta: la mínima que la sostuvo firme sin marcarla en la fase G (2026-11-02:
+# limón 200, naranja 300) + 25 % para el traslado. Sin tipo, o uno desconocido, usa Config.corriente_apriete.
+APRIETE_FRUTA = {"limon": 250, "naranja": 375}
 
 # Direcciones de la tabla de control
 MODO, LIMITE_CORRIENTE, LIM_POS_MAX, LIM_POS_MIN = 11, 38, 48, 52
@@ -86,6 +89,9 @@ class Config:
     cierre_extra: int = 150          # ticks más allá de CERRADA que medir_cierre puede buscar
     margen_dedos: int = 15           # contacto a menos de esto del cierre medido = dedos juntos, no un objeto;
                                      # el tope de apriete queda ahí, para no volver a apretar los dedos entre sí
+    zona_dedos: int = 30             # pinza detenida a menos de esto del cierre medido = dedos juntos (los dedos
+                                     # se tocan antes de donde los dejó la medida, que los apretó: 2026-11-02)
+    quieta_s: float = 0.5            # s sin moverse (<= 3 ticks) que cuentan como pinza detenida al cerrar
     retiro_dedos: int = 20           # ticks que se abre tras juntar los dedos, para soltar la presión
     gracia_p: float = 0.5            # s al empezar a mover la pinza sin vigilar la corriente: el despegue de los
                                      # dedos juntos pasó de 100 (2026-11-02) y al reintentar abrió bien
@@ -318,7 +324,7 @@ class Brazo:
     def medir_cierre(self):
         """Cierra en vacío, despacio y con poca corriente, hasta que los dedos se juntan. Desde ahí el apriete puede
         llegar hasta ese punto (frutas chicas como el limón no tocaban antes de CERRADA - MARGEN_PINZA) y un contacto
-        a menos de `margen_dedos` de él es "dedos juntos", no un objeto. Deja la pinza casi cerrada, sin presión;
+        a menos de `zona_dedos` de él es "dedos juntos", no un objeto. Deja la pinza casi cerrada, sin presión;
         devuelve la posición."""
         c = self.cfg
         limite = CERRADA + c.cierre_extra
@@ -380,7 +386,7 @@ class Brazo:
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
         self._escribir(PINZA, CORRIENTE_META, 2, c.corriente_agarre)
         self._escribir(PINZA, POS_META, 4, self.tope_apriete)
-        historial, inicio, contacto = [], self.reloj.ahora(), None
+        historial, inicio, contacto, quietas = [], self.reloj.ahora(), None, []
         while True:
             self._dormir(c.periodo)
             self._vigilar()
@@ -393,10 +399,17 @@ class Brazo:
             if abs(actual - self.tope_apriete) <= c.llegada_p:
                 self.log("    llegó al final sin contacto: no hay objeto")
                 return None
+            quietas.append((self.reloj.ahora(), actual))
+            while quietas and quietas[-1][0] - quietas[0][0] > c.quieta_s:
+                quietas.pop(0)
+            if (self.reloj.ahora() - inicio > c.quieta_s and quietas[-1][0] - quietas[0][0] >= c.quieta_s - c.periodo
+                    and max(q[1] for q in quietas) - min(q[1] for q in quietas) <= 3):
+                contacto = actual                   # detenida con poca corriente: contacto suave
+                break
             if self.reloj.ahora() - inicio > c.tiempo_max_p:
                 raise AbortoSuave(f"La pinza no cerró ni hizo contacto en {c.tiempo_max_p} s")
 
-        if self.cerrada is not None and contacto >= self.cerrada - c.margen_dedos:
+        if self.cerrada is not None and contacto >= self.cerrada - c.zona_dedos:
             self._escribir(PINZA, POS_META, 4, contacto)
             self.log(f"    los dedos se juntaron en {contacto}: no hay objeto")
             return None
@@ -422,6 +435,18 @@ class Brazo:
                 return actual
         self.log("    no llegó a la corriente de apriete")
         return None
+
+    def cerrar_fruta(self, tipo=None):
+        """cerrar_y_apretar con la corriente de apriete de esa fruta (orden cerrar:<tipo> de la misión)."""
+        c = self.cfg
+        apriete = APRIETE_FRUTA.get(tipo, c.corriente_apriete)
+        antes = c.corriente_apriete, c.corriente_agarre
+        c.corriente_apriete = apriete
+        c.corriente_agarre = min(apriete + 40, c.limite_corriente_p - 20)
+        try:
+            return self.cerrar_y_apretar()
+        finally:
+            c.corriente_apriete, c.corriente_agarre = antes
 
     # --- tornillo ---------------------------------------------------------------------------------------
     def _mover(self, destino, agarre=None, velocidad=None, corriente_max=None):
