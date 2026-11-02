@@ -10,7 +10,7 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(slam_toolbox REQUIRED)
-find_package(explore_lite_msgs QUIET)   # opcional, como el try/except de la versión Python
+find_package(explore_lite_msgs QUIET)   # opcional
 
 add_executable(supervisor_mision src/supervisor_mision.cpp)
 target_include_directories(supervisor_mision PRIVATE include)
@@ -23,8 +23,6 @@ else()
 endif()
 install(TARGETS supervisor_mision DESTINATION lib/${PROJECT_NAME})
 
-# La versión Python sigue instalada (para volver atrás): ros2 run wallens_nav supervisor_mision.py
-install(PROGRAMS scripts/supervisor_mision.py scripts/supervisor_logica.py DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config launch behavior_trees DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

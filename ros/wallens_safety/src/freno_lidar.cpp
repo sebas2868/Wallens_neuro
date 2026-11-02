@@ -1,5 +1,4 @@
-// Freno por obstáculo en C++ (mismo comportamiento que scripts/freno_lidar.py + vigilante_lidar.py, con la lógica de
-// include/wallens_safety/freno_logica.hpp). Lee /cmd_vel, mira /scan y publica /cmd_vel_safe, que es lo que escucha el
+// Freno por obstáculo (lógica en include/wallens_safety/freno_logica.hpp). Lee /cmd_vel, mira /scan y publica /cmd_vel_safe, que es lo que escucha el
 // driver. Además hace de vigilante: si /scan falta scan_lost_s segundos reinicia el nodo del LiDAR (SIGINT con pkill;
 // el respawn del launch lo vuelve a lanzar), esperando cooldown_s entre reinicios.
 // Interbloqueo del brazo: mientras /brazo/ocupado sea true (el brazo se mueve) publica velocidad 0.

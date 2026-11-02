@@ -1,7 +1,6 @@
 """Nodo ROS del brazo (tornillo ID 3 y gripper ID 5). Envuelve a ControlBrazo y habla con el bus por el servicio
-brazo/transaccion del driver (docs/brazo-bus-plan.md). Se lanza con launch/brazo.launch.py.
+brazo/transaccion del driver (docs/brazo-bus-plan.md). Lo lanza launch/mision.launch.py.
 
-  Acción  brazo/recoger (Recoger)       baja, cierra, sube; feedback con la fase. Cancelarla congela (aborto suave)
   Srv     brazo/calibrar, brazo/soltar, brazo/congelar, brazo/apagar (std_srvs/Trigger)
   Tópico  brazo/orden (String): órdenes sueltas de la misión (abrir, soltar, rearmar, cerrar[:tipo], bajar, subir); cada una
           responde en brazo/resultado (String, JSON {"orden", "ok", "texto"}; texto = "agarrado"/"sin_agarre" al cerrar)
@@ -14,7 +13,6 @@ import time
 
 import rclpy
 from nav_msgs.msg import Odometry
-from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -23,7 +21,6 @@ from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 
-from wallens_interfaces.action import Recoger
 from wallens_interfaces.msg import EstadoBrazo
 
 from .brazo import Brazo, Cero, Config, PINZA, TORNILLO
@@ -53,7 +50,6 @@ class NodoBrazo(Node):
         self.transporte = TransporteRclpy(self, self.timeout_bus, espera_servicio=None)   # un solo cliente
         self.odom_t, self.odom_v, self.odom_w = 0.0, 0.0, 0.0
         self.bateria_t, self.bateria_critica, self.bateria_mala = 0.0, False, True
-        self.meta_actual = None
         libre = ReentrantCallbackGroup()
         aparte = MutuallyExclusiveCallbackGroup()                # la vigilancia puede esperar al bus
         rapido = MutuallyExclusiveCallbackGroup()                # estado y batería no dependen del bus
@@ -71,11 +67,9 @@ class NodoBrazo(Node):
         self._ocupado_publicado = None
         self.pub_resultado = self.create_publisher(String, "brazo/resultado", 10)
         self.create_subscription(String, "brazo/orden", self._al_orden, 10, callback_group=libre)
-        for nombre, f in (("calibrar", "calibrar"), ("soltar", "soltar"), ("congelar", "congelar"), ("apagar", "apagar")):
-            self.create_service(Trigger, f"brazo/{nombre}", lambda req, resp, f=f: self._trigger(f, resp),
+        for nombre in ("calibrar", "soltar", "congelar", "apagar"):
+            self.create_service(Trigger, f"brazo/{nombre}", lambda req, resp, n=nombre: self._trigger(n, resp),
                                 callback_group=libre)
-        self.accion = ActionServer(self, Recoger, "brazo/recoger", execute_callback=self._ejecutar_recoger,
-                                   goal_callback=self._al_meta, cancel_callback=self._al_cancelar, callback_group=libre)
         self.create_timer(1.0, self._buscar_bus, callback_group=aparte)
         self.create_timer(self.periodo_reposo, self._mantener, callback_group=aparte)
         self.create_timer(0.2, self._publicar, callback_group=rapido)
@@ -94,7 +88,7 @@ class NodoBrazo(Node):
         cfg = Config(watchdog=self.watchdog, periodo=self.periodo)
         brazo = Brazo(BusRos(transporte), cal, cfg, cero=Cero(), log=lambda *_: None, usar_tornillo=self.usar_tornillo)
         self.control = ControlBrazo(brazo, ruedas_quietas=self._ruedas_quietas, homing=self.homing,
-                                    al_fase=self._al_fase, log=self.get_logger().info)
+                                    log=self.get_logger().info)
         self.get_logger().info("Bus del brazo listo (IDs 3 y 5); falta calibrar: servicio brazo/calibrar"
                                if self.usar_tornillo else "Bus del brazo listo (solo el gripper, ID 5)")
 
@@ -152,10 +146,6 @@ class NodoBrazo(Node):
             self._ocupado_publicado = ocupado
             self.pub_ocupado.publish(Bool(data=ocupado))
 
-    def _al_fase(self, fase):
-        if self.meta_actual is not None:
-            self.meta_actual.publish_feedback(Recoger.Feedback(fase=fase))
-
     # --- órdenes -------------------------------------------------------------------------------------------
     def _trigger(self, nombre, resp):
         if not self.control:
@@ -172,31 +162,6 @@ class NodoBrazo(Node):
             r_ok, texto = r.ok, (r.valor or r.mensaje) if r.ok else r.mensaje
         self.get_logger().info(f"orden {m.data}: {'ok' if r_ok else 'FALLA'} {texto}")
         self.pub_resultado.publish(String(data=json.dumps({"orden": m.data, "ok": r_ok, "texto": texto})))
-
-    def _al_meta(self, _):
-        if not self.control or self.control.ocupado:
-            return GoalResponse.REJECT
-        return GoalResponse.ACCEPT
-
-    def _al_cancelar(self, _):
-        if self.control:
-            self.control.congelar()                         # aborto suave: queda quieto con torque
-        return CancelResponse.ACCEPT
-
-    def _ejecutar_recoger(self, meta):
-        self.meta_actual = meta
-        try:
-            r = self.control.recoger()
-        finally:
-            self.meta_actual = None
-        res = Recoger.Result(agarrado=r.valor == "agarrado", resultado=r.valor or r.mensaje)
-        if r.ok:
-            meta.succeed()
-        elif meta.is_cancel_requested:
-            meta.canceled()
-        else:
-            meta.abort()
-        return res
 
 
 def main():

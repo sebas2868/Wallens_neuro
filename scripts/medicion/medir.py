@@ -49,8 +49,8 @@ NOMBRES = {}                                   # pid -> (comm, nombre): la líne
 
 
 def nombre_de(pid, comm):
-    """Nombre a partir de la línea de comandos (los nodos van con taskset/nice). El contenedor wallens_base se
-    distingue de otros component_container por su -r __node:=."""
+    """Nombre a partir de la línea de comandos (los nodos van con taskset/nice). Un component_container (Nav2) se
+    distingue por su -r __node:=."""
     if pid in NOMBRES and NOMBRES[pid][0] == comm:
         return NOMBRES[pid][1]
     with open(f"/proc/{pid}/cmdline", "rb") as f:

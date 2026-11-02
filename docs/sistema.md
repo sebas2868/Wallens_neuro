@@ -20,7 +20,7 @@ INA226 -> wallens_power -> /battery_state, /battery_critical -> wallens_driver (
 | `config/ekf.yaml` | `robot_localization`: velocidades x, y (siempre 0) y de giro de las ruedas + velocidad de giro del IMU, 2D, 30 Hz. El yaw absoluto del IMU no se usa (si el chip se reconfigura en marcha su rumbo vuelve a 0, #16) |
 | `launch/robot.launch.py` | Lanza todo; si el driver muere se cierra todo (`on_exit=Shutdown`) y systemd lo vuelve a lanzar |
 
-`vigilante_lidar` (en `wallens_safety`) reinicia el nodo del LiDAR si `/scan` falta 5 s, con 15 s de espera entre reinicios: el nodo
+El vigilante del LiDAR (dentro de `freno_lidar`, en `wallens_safety`) reinicia el nodo del LiDAR si `/scan` falta 5 s, con 15 s de espera entre reinicios: el nodo
 `ldlidar` no se cae al desenchufar el USB y no se recupera al reconectar (`/dev/lidar` pasa a otro `ttyUSB`). Medido: `/scan` de vuelta
 ~10 s después de desenchufar; mientras tanto el freno bloquea el avance (0.5 s tras el último `/scan`).
 
@@ -107,7 +107,7 @@ dominio 37: 7400 + 250 × 37 en adelante). Sin probar todavía de punta a punta 
 ## CPU
 
 El bus I²C por software espera bit a bit en el kernel. Medido con el servicio completo: núcleo 3 a ~26 % (solo el IMU, fijado con
-`taskset -c 3` en `imu.launch.py`), núcleos 0-2 a 15-18 % (`CPUAffinity=0 1 2` en el servicio), Pi al ~19 %, 43 °C, sin throttling.
+`taskset -c 3` en `robot.launch.py`), núcleos 0-2 a 15-18 % (`CPUAffinity=0 1 2` en el servicio), Pi al ~19 %, 43 °C, sin throttling.
 Con el driver Python del IMU (45 bytes, 50 Hz) el nodo llegaba al 85 % y el EKF dejaba de cumplir su ritmo.
 Presupuesto estimado (no medido) para SLAM + Nav2: 1-1.5 núcleos; video JPEG 640x480 a 15 fps ~0.3; H.264 por el codificador
 de la Pi 4 casi nada.

@@ -2,7 +2,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from supervisor_logica import COMPLETA, Supervisor  # noqa: E402
 
 

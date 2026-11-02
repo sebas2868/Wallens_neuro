@@ -17,13 +17,12 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
-# Freno + vigilante en C++ (freno_lidar). Los scripts Python siguen instalados para volver atrás (launch freno:=py).
+# Freno + vigilante del LiDAR. La versión Python de su lógica (test/) es solo el oráculo de los tests.
 add_executable(freno_lidar src/freno_lidar.cpp)
 target_include_directories(freno_lidar PRIVATE include)
 ament_target_dependencies(freno_lidar rclcpp geometry_msgs sensor_msgs std_msgs)
 install(TARGETS freno_lidar DESTINATION lib/${PROJECT_NAME})
 
-install(PROGRAMS scripts/freno_lidar.py scripts/freno_logica.py scripts/vigilante_lidar.py scripts/vigilante_logica.py DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

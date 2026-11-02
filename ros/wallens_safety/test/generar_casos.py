@@ -9,7 +9,7 @@ import random
 import sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(AQUI, "..", "scripts"))
+sys.path.insert(0, AQUI)
 from freno_logica import (Freno, borde_x, choque_al_girar, dentro, distancia_al_borde,  # noqa: E402
                           distancia_minima, distancia_pasillo, huella_wallens, puntos_base)
 from vigilante_logica import Vigilante  # noqa: E402

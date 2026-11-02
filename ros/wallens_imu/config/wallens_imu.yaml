@@ -5,11 +5,10 @@ wallens_imu:
     rate_hz: 20.0               # el EKF corre a 20 Hz; el bus por software gasta CPU en el kernel por cada byte leído
     frame_id: imu_link
     operation_mode: 0x08        # IMUPLUS: acelerómetro + giroscopio, sin magnetómetro
-    placement_axis_remap: "P6"  # IMU boca abajo: x chip = -y robot, y chip = -x robot, z chip = -z (medido con imu-ejes.py)
+    placement_axis_remap: "P6"  # IMU boca abajo: x chip = -y robot, y chip = -x robot, z chip = -z (medido con imu-ejes.py, borrado; está en git)
     calib_status_rate_hz: 1.0
     # "giro" (por defecto): lee solo los 6 bytes del giroscopio (el EKF solo usa la velocidad angular z) y publica
     # orientación y aceleración como no disponibles (covarianza[0] = -1). "completa": bloque de 26 bytes con cuaternión.
-    # Los scripts de scripts/odometria/ que leen el yaw del IMU (giro-imu.py, giro-ekf.py, giro-360.py,
-    # giro180-avance1m.py) necesitan `lectura: completa`.
+    # `completa` deja ver el yaw del IMU para compararlo con el del EKF.
     lectura: completa
     max_rate: 5.0               # rad/s; en modo giro, un eje por encima de esto es un bloque corrupto y se descarta

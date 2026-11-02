@@ -8,7 +8,7 @@ import os
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 import sys  # noqa: E402
-sys.path.insert(0, os.path.join(AQUI, "..", "scripts"))
+sys.path.insert(0, AQUI)
 from supervisor_logica import COMPLETA, Supervisor  # noqa: E402
 
 NAN = "nan"      # JSON no tiene NaN: el test C++ lo convierte

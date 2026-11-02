@@ -5,29 +5,28 @@ modo IMUPLUS (acelerómetro + giroscopio, sin magnetómetro). Driver: `ros/walle
 
 ## Uso
 
-El servicio `wallens` lo lanza con todo lo demás (`launch/robot.launch.py`). A mano:
+El servicio `wallens` lo lanza con todo lo demás (`launch/robot.launch.py`). Para verlo:
 
 ```
-ros2 launch ~/wallens/launch/imu.launch.py
+ros2 topic hz /bno055/imu
 ros2 topic echo /bno055/imu --once
 ```
 
 Topics (prefijo `bno055/`): `imu` (orientación + velocidad angular + aceleración lineal, 30 Hz) y `calib_status`
 (JSON con sys/gyro/accel/mag, 1 Hz). Parámetros en `ros/wallens_imu/config/wallens_imu.yaml`; el montaje boca abajo
-es `placement_axis_remap: "P6"` (se midió con `scripts/odometria/imu-ejes.py`, que usaba el driver anterior).
+es `placement_axis_remap: "P6"` (se midió con `imu-ejes.py` (borrado; está en el historial de git)).
 
 **Por qué un driver propio.** El bus por software gasta CPU del kernel por cada byte (espera bit a bit). El paquete
 Python `ros-jazzy-bno055` leía 45 bytes por ciclo a 50 Hz y dejaba su nodo al ~85 % de CPU; el EKF dejó de cumplir su
 ritmo. `wallens_imu` lee un solo bloque de 26 bytes (giroscopio, Euler, cuaternión, aceleración lineal) a 30 Hz: ~27 %.
 Descarta bloques con el cuaternión sin norma 1 (la lectura corrupta de 0xFF) y reconfigura el chip si pierde el modo.
 El lanzamiento lo fija al núcleo 3 (`taskset -c 3`) y el servicio deja el resto en los núcleos 0-2.
-`config/bno055.yaml` queda para volver al paquete Python (`ros2 run bno055 bno055 --ros-args --params-file ...`).
 
 **Parámetro `lectura`.** `giro` (por defecto) lee cada ciclo solo 6 bytes (0x14..0x19, giroscopio): el EKF solo usa la
 velocidad angular z. Publica `orientation` y `linear_acceleration` en cero con `covariance[0] = -1` (REP-145: no
 disponibles) y descarta la lectura si algún eje supera `max_rate` (5 rad/s; el robot no pasa de 1). `completa` lee el
-bloque de 26 bytes con chequeo de norma del cuaternión. Los scripts de `scripts/odometria/` que leen el yaw del IMU
-(`giro-imu.py`, `giro-ekf.py`, `giro-360.py`, `giro180-avance1m.py`) necesitan `lectura: completa`. Cualquier otro
+bloque de 26 bytes con chequeo de norma del cuaternión. Hoy va en `completa` para poder
+comparar el yaw del IMU con el del EKF. Cualquier otro
 valor aborta el nodo al arrancar.
 
 Acelerómetro sin calibrar a propósito: en IMUPLUS el yaw sale del giroscopio, que llega solo a 3. El chequeo de
@@ -35,8 +34,7 @@ arranque (`scripts/chequeo-arranque.py`) exige solo el giroscopio.
 
 ## Prueba de aceptación
 
-En la Pi: `~/wallens/scripts/test-imu.sh` → `OK: /bno055/imu a ~50 Hz`.
-Estabilidad: `~/wallens/scripts/estabilidad-imu.sh 30` (30 min, cuenta errores).
+El chequeo de arranque (`scripts/chequeo-arranque.py ros`) avisa si `/bno055/imu` baja de 15 Hz o el giroscopio no está en 3.
 
 ## Por qué un bus I²C por software
 
@@ -50,18 +48,16 @@ pines (GPIO 2 y 3, pines 3 y 5), que sigue siendo `/dev/i2c-1`; no cambia el cab
 `scripts/03-i2c.sh --diff` muestra el cambio sin escribir; el script hace copia `config.txt.bak-<fecha>` y escritura
 atómica, y deja el overlay al final porque los `dtparam` de la base deben ir antes de cualquier `dtoverlay=`.
 Resultado medido: 0 fallos en 7600 ciclos (5 min) y 0 picos en ventanas de 30 s con el driver ROS y `wallens_power`.
-`scripts/odometria/imu-directo.py` repite esa medición leyendo el chip sin ROS (parar antes `wallens_imu`, que va dentro del servicio: `sudo systemctl stop wallens`).
+La medición se hizo con `imu-directo.py`, leyendo el chip sin ROS (borrado; está en el historial de git).
 
 `i2c_gpio_delay_us=3` (antes 10): el IMU pasó de 17.8 % a 10.3 % de un núcleo (el bus por software gasta CPU en
 kernel por cada byte), con 20 669 lecturas en 5 min sin errores de I²C, sin bloques `0xFF` ni de norma mala.
 
-Filtrar en vez de usar bus por software NO sirve (probado 2026-11-01 con `scripts/prueba-i2c-hardware.sh` y
-`scripts/odometria/imu-bus.py`, 5 min a 100 kHz): 129 lecturas malas de 20 316 (0.63 %), de ellas 83 pasan el filtro de
+Filtrar en vez de usar bus por software NO sirve (probado 2026-11-01 con `prueba-i2c-hardware.sh` e
+`imu-bus.py` (borrado; está en el historial de git), 5 min a 100 kHz): 129 lecturas malas de 20 316 (0.63 %), de ellas 83 pasan el filtro de
 norma del driver. Son un solo bit 7 de un byte invertido (p. ej. cuaternión `fb3f` → `fbbf`: cambia el signo de `w` y la
 norma sigue en 1.0). Un filtro de salto atraparía los errores grandes, pero los del byte bajo del giro (±0.14 rad/s)
 se confunden con movimiento real. Por eso se mantiene el bus por software.
-
-`scripts/prueba-i2c-gpio.sh` carga el bus por software solo en ejecución (sin tocar `config.txt`; reiniciar lo deshace).
 
 El reinicio de la Pi resetea el BNO055 (modo CONFIGMODE, calibración a 0 salvo el giroscopio): el driver le fija el
 modo al arrancar.

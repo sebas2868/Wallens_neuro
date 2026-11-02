@@ -20,12 +20,11 @@ Guardado en `scripts/calibracion-tornillo.json`.
 
 ## Scripts
 
-- `scripts/test-tornillo.py [--sentido=+1|-1] [--corriente=N] [--arriba=N] [--tope-arriba=N] [--vueltas=N]`: busca topes despacio
-  (~9 rpm, ~320 mA) hasta que la posición se detiene con corriente subiendo. Guarda el JSON si completa.
+- `scripts/jog-tornillo.py`: mueve el tornillo de a poco con el teclado y detecta los topes por corriente.
+- `scripts/prueba-brazo.py --etapa=N`: pruebas por etapas del tornillo y el gripper (ver `docs/gripper-plan.md`).
+- Los primeros `test-tornillo.py` y `test-tornillo-ciclos.py` (búsqueda de topes y ciclos a 150 ≈ 34 rpm; el tope de
+  fábrica es 265 ≈ 61 rpm) están borrados; siguen en el historial de git.
   Ojo: el registro 48 (Max Position Limit) solo acepta 0-4095; en modo multivuelta se ignora, no escribirlo.
-- `scripts/test-tornillo-ciclos.py [--ciclos=N] [--velocidad=N] [--aceleracion=N]`: va y viene entre los límites útiles y mide
-  tiempo, error de llegada y corriente máxima por tramo. Aborta si la corriente pasa de 250 sostenida, si no avanza o por
-  temperatura/voltaje. Por defecto 150 (~34 rpm); el tope de fábrica de velocidad es 265 (~61 rpm).
 
 ## Pendiente
 

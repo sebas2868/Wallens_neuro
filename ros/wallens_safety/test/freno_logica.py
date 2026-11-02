@@ -1,4 +1,4 @@
-"""Lógica del freno LiDAR sin ROS: la usa freno_lidar.py y se prueba en test/ con scans y comandos sintéticos."""
+"""Lógica del freno LiDAR en Python: oráculo de freno_logica.hpp (generar_casos.py -> casos_freno.json) y se prueba en test_freno.py."""
 import json
 import math
 

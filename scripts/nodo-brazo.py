@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lanza el nodo wallens_brazo (necesita ROS cargado y el driver con brazo_habilitado:=true). Ver launch/brazo.launch.py."""
+"""Lanza el nodo wallens_brazo (necesita ROS cargado y el driver con brazo_habilitado:=true). Lo usa launch/mision.launch.py."""
 import os
 import sys
 

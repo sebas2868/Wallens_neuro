@@ -4,8 +4,8 @@ After=multi-user.target
 
 [Service]
 User=wallens
-# Todo en los núcleos 0-1. robot.launch.py fija el driver al 2 con prioridad de tiempo real (chrt -f 50) e
-# imu.launch.py el IMU al 3 (I2C por software). LimitRTPRIO deja a un usuario normal pedir esa prioridad.
+# Todo en los núcleos 0-1. robot.launch.py fija el driver al 2 con prioridad de tiempo real (chrt -f 50) y
+# el IMU, el EKF y el freno al 3 (I2C por software). LimitRTPRIO deja a un usuario normal pedir esa prioridad.
 CPUAffinity=0 1
 LimitRTPRIO=50
 ExecStart=/home/wallens/wallens/scripts/arranque.sh

@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from freno_logica import Freno, distancia_minima  # noqa: E402
 
 N = 450
@@ -353,8 +353,7 @@ def test_huella_igual_en_freno_y_nav2():
 
 def test_posicion_del_lidar_igual_en_todas_partes():
     laser_x = re.search(r"laser_x: ([\d.]+)", _leer("ros/wallens_safety/config/wallens_safety.yaml")).group(1)
-    assert f"arguments=['{laser_x}'," in _leer("launch/lidar.launch.py")
-    assert f"'base_link_to_base_laser', {laser_x}," in _leer("launch/robot.launch.py")
+    assert f"'base_link_to_base_laser', '{laser_x}'," in _leer("launch/robot.launch.py")
 
 
 def test_huella_real_incluye_carro_y_dedos_cerrados():

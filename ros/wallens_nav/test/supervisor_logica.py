@@ -1,4 +1,5 @@
-"""Lógica del supervisor de la misión de mapeo, sin ROS: la usa supervisor_mision.py y se prueba en test/.
+"""Lógica del supervisor de la misión de mapeo en Python: oráculo de supervisor_logica.hpp (generar_casos_supervisor.py)
+y se prueba en test_supervisor.py.
 
 Decide cuándo se termina la misión ("fin": se guarda el mapa y se apaga la navegación) o se aborta ("fallo": además
 se publica /parada para que nada vuelva a mover el robot hasta que alguien lo revise). Nunca reintenta."""

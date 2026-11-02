@@ -1,4 +1,4 @@
-// Lógica del freno LiDAR y del vigilante sin ROS: traducción fiel de scripts/freno_logica.py y vigilante_logica.py.
+// Lógica del freno LiDAR y del vigilante sin ROS: traducción fiel de test/freno_logica.py y test/vigilante_logica.py.
 // Mismo orden de operaciones y mismos casos límite; test/test_freno_cpp.cpp la compara con el oráculo de Python
 // (test/casos_freno.json). Si cambias una, cambia la otra y regenera: python3 test/generar_casos.py
 #pragma once

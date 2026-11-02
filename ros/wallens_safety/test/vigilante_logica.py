@@ -1,4 +1,4 @@
-"""Lógica del vigilante del LiDAR sin ROS (la usa vigilante_lidar.py y se prueba en test/)."""
+"""Lógica del vigilante del LiDAR en Python: oráculo de freno_logica.hpp (generar_casos.py) y se prueba en test_freno.py."""
 import math
 
 

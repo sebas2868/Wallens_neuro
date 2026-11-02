@@ -21,7 +21,7 @@ target_include_directories(wallens_driver PRIVATE include)
 ament_target_dependencies(wallens_driver rclcpp geometry_msgs nav_msgs sensor_msgs std_msgs tf2_ros dynamixel_sdk wallens_interfaces)
 
 install(TARGETS wallens_driver DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 # Pruebas de BusBrazo con un puerto falso (sin SDK ni ROS): colcon test --packages-select wallens_driver
 if(BUILD_TESTING)

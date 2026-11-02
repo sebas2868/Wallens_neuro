@@ -1,5 +1,4 @@
-// Supervisor de la misión de mapeo (C++): mismo comportamiento que scripts/supervisor_mision.py, sin deserializar
-// Odometry completo en Python. Vigila explore_lite, la batería, la odometría y el freno; al terminar o fallar
+// Supervisor de la misión de mapeo (lógica en include/wallens_nav/supervisor_logica.hpp). Vigila explore_lite, la batería, la odometría y el freno; al terminar o fallar
 // detiene la exploración, guarda el mapa con slam_toolbox y sale (mapeo.launch.py cierra entonces todo: on_exit=Shutdown).
 // En un fallo además publica /parada true (el driver la mantiene hasta /parada false). Nunca reintenta.
 #include <chrono>

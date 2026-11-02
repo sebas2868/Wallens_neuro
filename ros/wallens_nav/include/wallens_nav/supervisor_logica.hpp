@@ -1,4 +1,4 @@
-// Lógica del supervisor de la misión de mapeo, sin ROS: traducción fiel de scripts/supervisor_logica.py.
+// Lógica del supervisor de la misión de mapeo, sin ROS: traducción fiel de test/supervisor_logica.py.
 // La usa src/supervisor_mision.cpp y se prueba en test/test_supervisor_cpp.cpp contra el oráculo de Python.
 // Decide cuándo se termina la misión ("fin": se guarda el mapa) o se aborta ("fallo": además /parada). Nunca reintenta.
 #pragma once

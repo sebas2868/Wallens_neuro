@@ -39,4 +39,4 @@ ros2 topic hz /cam_garra/image_raw
 
 ## Prueba de aceptación
 
-En la Pi: `~/wallens/scripts/test-camaras.sh` captura 5 cuadros de cada una.
+`scripts/preflight.py` (lo corre `probar-mision.sh`) enciende cada cámara y comprueba que el detector publica con ella.

@@ -16,7 +16,7 @@ from .bus import ErrorBus, Reloj
 TORNILLO, PINZA = 3, 5
 MODELO = 1030                       # XM430-W210
 MARCA_ADDR, MARCA = 222, 0xCA11     # Indirect Address 28: RAM sin uso; vuelve a su valor por defecto sin los 12 V
-ABIERTA, CERRADA, MARGEN_PINZA = 2794, 3851, 60   # recorrido medido del gripper (test-gripper.py)
+ABIERTA, CERRADA, MARGEN_PINZA = 2794, 3851, 60   # recorrido medido del gripper
 # corriente de apriete por fruta: la mínima que la sostuvo firme sin marcarla en la fase G (2026-11-02:
 # limón 200, naranja 300) + 25 % para el traslado. Sin tipo, o uno desconocido, usa Config.corriente_apriete.
 # dónde se juntan los dedos: medir_cierre dio 3890, 3891 y 3891 (2026-11-02). La misión usa este valor y no mide:

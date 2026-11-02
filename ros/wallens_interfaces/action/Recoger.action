@@ -1,6 +1,0 @@
-# Baja, cierra la pinza y sube con el objeto (el brazo tiene que estar calibrado y las ruedas quietas)
----
-bool agarrado
-string resultado       # "agarrado", "sin_agarre" o el motivo del rechazo/aborto
----
-string fase            # Bajando, Cerrando la pinza, Subiendo con el objeto...

@@ -7,7 +7,7 @@ y mano cerca. Rutas: `avance` (1 m adelante y atrás), `ida-vuelta` (2 m, giro 1
 contra una marca en el suelo. Criterio: menos de 3 cm y menos de 2°, 5 corridas sin corregir entre ellas.
 `ESCALA` en el script multiplica la velocidad base (0.10 m/s y 0.3 rad/s) y los anticipos de frenado; hoy 1.2.
 
-Otras: `giro-ekf.py` (360° cerrado con el EKF), `prueba-freno.py` (comprueba el freno con un obstáculo a menos de 30 cm).
+Otra: `prueba-freno.py` (comprueba el freno con un obstáculo a menos de 30 cm).
 
 ## Resultados (2026-11-01)
 
