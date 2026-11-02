@@ -30,3 +30,6 @@ wallens_driver:
     odom_frame: odom
     base_frame: base_link
     publish_tf: false           # lo publica el EKF (config/ekf.yaml) fusionando el IMU
+
+    brazo_habilitado: false     # true: servicio brazo/transaccion para el tornillo (ID 3) y el gripper (ID 5); ver docs/brazo-bus-plan.md
+    brazo_max_ms: 12.0          # ms de bus máximos del brazo por llamada y por ciclo (sobran ~13 ms de los 33 a 57600 baudios)

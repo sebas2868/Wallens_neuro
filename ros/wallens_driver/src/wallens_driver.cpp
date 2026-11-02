@@ -3,6 +3,8 @@
 // Si pierde /cmd_vel o la comunicación frena, y al salir apaga el torque (verificándolo). Frena también con
 // /parada, sin /battery_state reciente y con comandos no finitos. Detecta el watchdog del bus disparado (registro 98),
 // lo rearma y lo registra.
+// Con brazo_habilitado atiende, en el mismo hilo de motores y entre dos ciclos, las transacciones del brazo (IDs 3 y 5)
+// que llegan por el servicio brazo/transaccion (docs/brazo-bus-plan.md).
 #include <pthread.h>
 #include <sched.h>
 
@@ -26,6 +28,10 @@
 #include "sensor_msgs/msg/battery_state.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "tf2_ros/transform_broadcaster.h"
+#include "wallens_driver/bus_brazo.hpp"
+#include "wallens_driver/puerto_sdk.hpp"
+#include "wallens_interfaces/msg/diagnostico_bus.hpp"
+#include "wallens_interfaces/srv/transaccion_dxl.hpp"
 
 namespace {
 
@@ -97,6 +103,9 @@ class WallensDriver : public rclcpp::Node {
     publicar_tf_ = declare_parameter("publish_tf", true);
     // Prioridad SCHED_FIFO del hilo de motores (0 = normal). Necesita LimitRTPRIO en la unidad de systemd.
     prioridad_rt_ = static_cast<int>(declare_parameter("rt_priority", 50));
+    // Servicio del brazo (apagado por defecto: sin él el driver es el de siempre)
+    brazo_habilitado_ = declare_parameter("brazo_habilitado", false);
+    brazo_max_ms_ = declare_parameter("brazo_max_ms", 12.0);   // tiempo de bus máximo del brazo por llamada y por ciclo
 
     if (radio_ <= 0 || separacion_ <= 0 || loop_hz_ <= 0 || max_rpm_ <= 0) {
       throw std::invalid_argument("wheel_radius, wheel_separation, loop_hz y max_wheel_rpm deben ser > 0");
@@ -149,6 +158,7 @@ class WallensDriver : public rclcpp::Node {
   }
 
   ~WallensDriver() override {                   // por si nadie llamó a apagar(): un std::thread vivo aborta al destruirse
+    if (brazo_) brazo_->cerrar();
     corriendo_ = false;
     if (hilo_motores_.joinable()) hilo_motores_.join();
   }
@@ -188,6 +198,7 @@ class WallensDriver : public rclcpp::Node {
     // El bucle de los motores va en su propio hilo, que no toca ROS: con SLAM + Nav2 y el PC conectado, el hilo del
     // executor llegó a bloquearse ~350 ms dentro de la capa DDS y, con el bucle en un timer, saltaba el watchdog del
     // bus (200 ms). El executor solo recibe órdenes y publica la última odometría que deja el hilo.
+    if (brazo_habilitado_) iniciar_brazo();
     corriendo_ = true;
     hilo_motores_ = std::thread([this] { bucle_motores(); });
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / loop_hz_), [this] { publicar_pendiente(); });
@@ -197,6 +208,7 @@ class WallensDriver : public rclcpp::Node {
 
   // Frena, apaga el torque y comprueba con una lectura que quedó apagado. Se puede llamar varias veces.
   void apagar() {
+    if (brazo_) brazo_->cerrar();                // los clientes del brazo reciben "bus apagado" y no se quedan esperando
     corriendo_ = false;                          // el hilo de motores termina su ciclo y sale
     if (hilo_motores_.joinable()) hilo_motores_.join();
     if (!motores_activos_) return;
@@ -242,7 +254,10 @@ class WallensDriver : public rclcpp::Node {
         std::chrono::duration<double>(1.0 / loop_hz_));
     auto siguiente = std::chrono::steady_clock::now();
     while (corriendo_) {
-      ciclo();
+      const bool ok = ciclo();
+      // El brazo usa el bus solo si el ciclo de las ruedas salió bien y no es el de revisar_watchdog (dos lecturas
+      // sueltas, ~10 ms): ese ciclo ya no tiene margen.
+      if (brazo_ && ok && corriendo_ && ciclos_ % std::max(1, static_cast<int>(loop_hz_)) != 0) atender_brazo();
       siguiente += periodo;
       const auto ahora = std::chrono::steady_clock::now();
       if (siguiente < ahora) siguiente = ahora;  // atrasado: no se encadenan ciclos para recuperar
@@ -250,7 +265,8 @@ class WallensDriver : public rclcpp::Node {
     }
   }
 
-  void ciclo() {
+  // Devuelve si el ciclo salió sin fallos. Nada del brazo pasa por aquí, así que sus errores no cuentan en fallos_.
+  bool ciclo() {
     const auto ahora = std::chrono::steady_clock::now();
     try {
       mandar_velocidades(ahora);
@@ -260,6 +276,7 @@ class WallensDriver : public rclcpp::Node {
         revisar_watchdog(ahora);
       }
       fallos_ = 0;
+      return true;
     } catch (const Fatal& e) {
       RCLCPP_FATAL(get_logger(), "%s: se apaga el driver", e.what());
       fallo_fatal_ = true;
@@ -274,6 +291,91 @@ class WallensDriver : public rclcpp::Node {
       } else {
         RCLCPP_WARN(get_logger(), "Fallo de comunicación %d/%d: %s", fallos_, max_fallos_, e.what());
       }
+    }
+    return false;
+  }
+
+  // Servicio del brazo: crea el BusBrazo sobre el puerto ya abierto. Los callbacks del executor solo encolan; el
+  // puerto lo toca únicamente el hilo de motores (atender_brazo), y las respuestas las envía el executor.
+  void iniciar_brazo() {
+    puerto_brazo_ = std::make_unique<wallens::PuertoSdk>(port_, ph_);
+    wallens::ConfigBrazo cfg;
+    cfg.baudrate = baudrate_;
+    cfg.max_ms = brazo_max_ms_;
+    brazo_ = std::make_unique<wallens::BusBrazo>(puerto_brazo_.get(), cfg);
+    srv_brazo_ = create_service<wallens_interfaces::srv::TransaccionDxl>(
+        "brazo/transaccion",
+        [this](std::shared_ptr<rmw_request_id_t> cab, std::shared_ptr<wallens_interfaces::srv::TransaccionDxl::Request> req) {
+          std::vector<wallens::OperacionDxl> ops;
+          for (const auto& m : req->operaciones) {
+            if (m.tipo > static_cast<uint8_t>(wallens::TipoOp::Ping)) {
+              wallens::RespuestaDxl r;
+              r.motivo = "tipo de operación inválido: " + std::to_string(m.tipo);
+              responder_brazo(cab, std::move(r));
+              return;
+            }
+            ops.push_back({static_cast<wallens::TipoOp>(m.tipo), m.id, m.direccion, m.largo, m.valor});
+          }
+          brazo_->encolar(std::move(ops), [this, cab](wallens::RespuestaDxl&& r) { responder_brazo(cab, std::move(r)); });
+        });
+    pub_diagnostico_ = create_publisher<wallens_interfaces::msg::DiagnosticoBus>("bus/diagnostico", 1);
+    timer_brazo_ = create_wall_timer(std::chrono::milliseconds(10), [this] { enviar_respuestas_brazo(); });
+    RCLCPP_INFO(get_logger(), "Servicio del brazo activo (IDs 3 y 5, hasta %.0f ms de bus por llamada y por ciclo)", brazo_max_ms_);
+  }
+
+  // Cualquier hilo: deja la respuesta lista; la envía el executor (enviar un mensaje puede bloquearse en la capa DDS)
+  void responder_brazo(const std::shared_ptr<rmw_request_id_t>& cab, wallens::RespuestaDxl&& r) {
+    std::lock_guard<std::mutex> l(mtx_brazo_);
+    respuestas_brazo_.emplace_back(cab, std::move(r));
+  }
+
+  // Executor, cada 10 ms: envía las respuestas listas y, una vez por segundo, el diagnóstico
+  void enviar_respuestas_brazo() {
+    std::vector<std::pair<std::shared_ptr<rmw_request_id_t>, wallens::RespuestaDxl>> listas;
+    {
+      std::lock_guard<std::mutex> l(mtx_brazo_);
+      listas.swap(respuestas_brazo_);
+    }
+    for (auto& [cab, r] : listas) {
+      wallens_interfaces::srv::TransaccionDxl::Response resp;
+      resp.aceptada = r.aceptada;
+      resp.motivo = r.motivo;
+      resp.tiempo_bus_ms = r.tiempo_bus_ms;
+      for (const auto& x : r.resultados) {
+        wallens_interfaces::msg::ResultadoDxl m;
+        m.estado = static_cast<uint8_t>(x.estado);
+        m.comunicacion = x.comunicacion;
+        m.error_motor = x.error_motor;
+        m.valor = x.valor;
+        m.datos = x.datos;
+        resp.resultados.push_back(std::move(m));
+      }
+      srv_brazo_->send_response(*cab, resp);
+    }
+    const auto ahora = std::chrono::steady_clock::now();
+    if (ahora - ultimo_diagnostico_ >= std::chrono::seconds(1)) {
+      ultimo_diagnostico_ = ahora;
+      const auto d = brazo_->diagnostico();
+      wallens_interfaces::msg::DiagnosticoBus m;
+      m.transacciones = d.transacciones;
+      m.rechazadas = d.rechazadas;
+      m.en_cola = static_cast<uint32_t>(d.en_cola);
+      m.tiempo_bus_ms_total = d.tiempo_bus_ms_total;
+      m.tiempo_bus_ms_max = static_cast<float>(d.tiempo_bus_ms_max);
+      m.ciclos_atrasados = ciclos_atrasados_;
+      m.ciclos_tardios = ciclos_tardios_;
+      pub_diagnostico_->publish(m);
+    }
+  }
+
+  // Hilo de motores. BusBrazo no lanza, pero un fallo del brazo no debe llegar nunca al catch de ciclo()
+  void atender_brazo() {
+    try {
+      brazo_->atender(brazo_max_ms_);
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000, "Brazo: %s", e.what());
+    } catch (...) {
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000, "Brazo: excepción desconocida");
     }
   }
 
@@ -357,7 +459,9 @@ class WallensDriver : public rclcpp::Node {
     }
     const double dt = std::chrono::duration<double>(ahora - t_previo_).count();
     t_previo_ = ahora;
-    if (dt > 3.0 / loop_hz_) {                   // un ciclo tardío acerca el watchdog del bus (200 ms): carga de CPU
+    if (dt > 1.5 / loop_hz_) ++ciclos_atrasados_;
+    if (dt > 3.0 / loop_hz_) {
+      ++ciclos_tardios_;                   // un ciclo tardío acerca el watchdog del bus (200 ms): carga de CPU
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Ciclo tardío: %.0f ms entre lecturas (esperado %.0f)",
                            dt * 1000.0, 1000.0 / loop_hz_);
     }
@@ -523,6 +627,8 @@ class WallensDriver : public rclcpp::Node {
   double loop_hz_, radio_, separacion_, max_lineal_, max_angular_, max_rpm_, cmd_timeout_, voltaje_min_, voltaje_max_;
   bool publicar_tf_;
   int prioridad_rt_ = 50;
+  bool brazo_habilitado_ = false;
+  double brazo_max_ms_ = 12.0;
 
   // hardware
   dynamixel::PortHandler* port_ = nullptr;
@@ -531,6 +637,14 @@ class WallensDriver : public rclcpp::Node {
   std::unique_ptr<dynamixel::GroupSyncRead> sync_lectura_;
   Rueda izq_, der_;
   bool motores_activos_ = false;
+
+  // brazo (solo con brazo_habilitado): brazo_ lo vacía el hilo de motores; las respuestas las envía el executor
+  std::unique_ptr<wallens::PuertoSdk> puerto_brazo_;
+  std::unique_ptr<wallens::BusBrazo> brazo_;
+  std::mutex mtx_brazo_;                        // respuestas_brazo_
+  std::vector<std::pair<std::shared_ptr<rmw_request_id_t>, wallens::RespuestaDxl>> respuestas_brazo_;
+  std::chrono::steady_clock::time_point ultimo_diagnostico_{};
+  std::atomic<uint64_t> ciclos_atrasados_{0}, ciclos_tardios_{0};
 
   // hilos: el de motores (bucle_motores) y el executor (callbacks y publicación) comparten solo lo de los mutex
   std::thread hilo_motores_;
@@ -569,7 +683,9 @@ class WallensDriver : public rclcpp::Node {
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_parada_, sub_parada_volatil_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_;
-  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr timer_, timer_brazo_;
+  rclcpp::Service<wallens_interfaces::srv::TransaccionDxl>::SharedPtr srv_brazo_;
+  rclcpp::Publisher<wallens_interfaces::msg::DiagnosticoBus>::SharedPtr pub_diagnostico_;
 };
 
 int main(int argc, char** argv) {
