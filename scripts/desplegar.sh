@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Despliega el repo en la Pi sin perder tiempo: corre los tests (si fallan no copia nada), rsync a ~/wallens solo de lo
 # que cambió (por checksum), compila solo los paquetes ROS tocados y comprueba con md5 que la fuente y lo instalado en la
-# Pi son lo de aquí. No reinicia nada en marcha (un nodo de un launch no vuelve solo): dice qué relanzar.
+# Pi son lo de aquí. Si cambió algo que usa el servicio que corre (wallens o wallens-mision), lo reinicia.
 # Uso: scripts/desplegar.sh [--sin-tests]      WALLENS_IP=<ip> se salta la búsqueda de la Pi
 set -euo pipefail
 AQUI=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,10 +44,18 @@ while read -r local remoto; do
 done <<< "$pares"
 [ $malos = 0 ] && echo "  todo igual"
 
-relanzar=""
-grep -q '^scripts/brazo/\|^scripts/nodo-brazo' <<< "$cambios" && relanzar+=" wallens_brazo"
-grep -q '^ros/wallens_mision/src\|^ros/wallens_mision/CMake' <<< "$cambios" && relanzar+=" detector_frutas"
-grep -q '^ros/wallens_\(driver\|safety\|interfaces\)\|^launch/robot' <<< "$cambios" && relanzar+=" robot(driver/freno)"
-grep -q '^ros/wallens_mision/scripts' <<< "$cambios" && relanzar+=" (la próxima misión ya usa lo nuevo)"
-[ -n "$relanzar" ] && echo "== relanzar mision.launch.py si está corriendo:$relanzar"
-exit $malos
+[ $malos = 0 ] || { echo "no reinicio nada: la Pi no tiene lo de aquí"; exit 1; }
+
+# Reinicia el servicio activo (wallens o wallens-mision) si cambió algo que usa, para que nunca corra código viejo. Los
+# scripts de la misión no: cada misión los lee al empezar. Ninguno mueve motores al arrancar.
+if grep -v '^ros/wallens_mision/\(scripts\|test\)/' <<< "$cambios" \
+   | grep -q '^ros/\|^launch/\|^config/\|^scripts/\(brazo/\|nodo-brazo\|arranque\|chequeo-arranque\)'; then
+  for s in wallens-mision wallens; do
+    if ssh -n "$PI" "systemctl is-active -q $s"; then
+      echo "== reinicio $s (cambió algo que usa)"
+      ssh -n "$PI" "sudo -n systemctl restart $s" || echo "  no pude: falta sudo ~/wallens/scripts/04-servicio.sh en la Pi"
+    fi
+  done
+fi
+grep -q '^systemd/' <<< "$cambios" && echo "== cambió systemd/: en la Pi corre sudo ~/wallens/scripts/04-servicio.sh"
+exit 0

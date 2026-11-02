@@ -1,0 +1,21 @@
+[Unit]
+Description=Robot Wallens para la misión de frutas (robot con el brazo, nodo del brazo y detector; mision.launch.py)
+After=multi-user.target
+# Usa el mismo bus que wallens.service: systemd nunca deja los dos a la vez (arrancar uno para el otro)
+Conflicts=wallens.service
+
+[Service]
+User=wallens
+# Igual que wallens.service. No arranca solo al encender (sin [Install]): lo arranca probar-mision.sh y al parar
+# este o reiniciar la Pi vuelve wallens.service. Parar o reiniciar mata todo su grupo de procesos: sin nodos huérfanos.
+CPUAffinity=0 1
+LimitRTPRIO=50
+ExecStart=/home/wallens/wallens/scripts/arranque.sh mision depuracion:=true
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/wallens/wallens/config/ros-red.env
+EnvironmentFile=-/home/wallens/.config/wallens/peers.env
+Environment=ROS_LOG_DIR=/run/wallens-log
+RuntimeDirectory=wallens-log
+KillSignal=SIGINT
+TimeoutStopSec=15

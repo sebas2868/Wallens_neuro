@@ -7,16 +7,15 @@
 #   hasta-agarrar  como acercar y luego lo agarra (hasta VERIFICAR)
 #   completa       lo agarra, lo deja donde arrancó el robot y se aparta (por defecto)
 # Cada vez:
-#   1. para el servicio wallens si corre (pide la contraseña de sudo) y lanza mision.launch.py si no está (o lo relanza
-#      si le falta un nodo o el detector se recompiló); queda corriendo para la etapa siguiente
+#   1. arranca el servicio wallens-mision si no corre (para wallens.service); queda corriendo para la etapa siguiente
 #   2. preflight: si algo falta lo dice y no mueve nada
 #   3. la misión, con todo el registro en ~/.cache/wallens/mision-<fecha>/ (y los cuadros de las cámaras en
 #      ~/.cache/wallens/detector/)
-# Uso: ~/wallens/scripts/probar-mision.sh [agarre|acercar|hasta-agarrar|completa]
+# Uso: ~/wallens/scripts/probar-mision.sh [agarre|acercar|hasta-agarrar|completa]   (desde el PC: scripts/probar.sh)
 # Calibración: una misión que agarra bien guarda dónde ve cam_garra la fruta agarrada en ~/.config/wallens/agarre.yaml
 # y las siguientes lo cargan solas (se imprime). Para forzar otros: X_AGARRE=-0.215 Y_AGARRE=0.004 probar-mision.sh ...
 # Cualquier otro campo de Config se pasa igual: MAS="-p v_max:=0.12 -p w_max:=0.45" probar-mision.sh ...
-# Para parar el launch al acabar: kill del PID que se imprime (el gripper sostiene la fruta si quedó agarrada).
+# Al acabar: sudo systemctl start wallens vuelve al robot normal (el gripper suelta la fruta al apagarse el torque).
 set -eo pipefail   # sin -u: el setup.bash de ROS usa variables sin definir
 source ~/wallens/scripts/ros-env.sh       # ROS, el workspace y la red del robot (dominio 37), como el servicio
 ETAPA=${1:-completa}
@@ -37,46 +36,22 @@ LOG=~/.cache/wallens/mision-$(date +%Y%m%d-%H%M%S)-$ETAPA
 mkdir -p "$LOG"
 trap 'echo "Registro: $LOG"' EXIT          # también si algo falla o tras Ctrl+C
 
-servicio=$(systemctl is-active wallens || true)
-if [[ $servicio == activ* || $servicio == reloading ]]; then   # "activating": atascado en su chequeo, ya abrió el bus
-  echo "Paro el servicio wallens (usa el mismo bus): sudo systemctl stop wallens"
-  sudo systemctl stop wallens
-fi
-# el launch se reconoce por su proceso (no por un nodo: con uno caído se lanzaba otro encima y los dos drivers chocaban
-# en el bus). Se relanza si le falta un nodo o si el detector se recompiló después de lanzarlo.
-launch=$(pgrep -f "ros2 launch .*mision.launch.py" | head -1 || true)
-detector=~/ros_ws/install/wallens_mision/lib/wallens_mision/detector_frutas
-if [ -n "$launch" ]; then
-  inicio=$(date -d "$(ps -o lstart= -p "$launch")" +%s)
-  if ! pgrep -x detector_frutas >/dev/null || ! pgrep -x wallens_driver >/dev/null || ! pgrep -f nodo-brazo.py >/dev/null \
-     || [ "$(stat -c %Y "$detector")" -gt "$inicio" ]; then
-    echo "relanzo mision.launch.py (PID $launch): le falta un nodo o el detector es más nuevo"
-    # TERM, no INT: lanzado en segundo plano desde un script, ros2 launch hereda SIGINT ignorado y no se paraba; y a
-    # todo su grupo (setsid): con TERM el launch sale enseguida y dejaba a sus nodos huérfanos
-    grupo=$(ps -o pgid= -p "$launch" | tr -d ' ')
-    kill -TERM -- "-$grupo"
-    for _ in $(seq 40); do pgrep -g "$grupo" >/dev/null || break; sleep 0.5; done
-    launch=""
-  fi
-fi
-# nunca dos drivers en el bus: si queda uno de un launch anterior, no se lanza otro
-if [ -z "$launch" ] && pgrep -x wallens_driver >/dev/null; then
-  echo "Sigue corriendo un wallens_driver (PID $(pgrep -x wallens_driver | tr '\n' ' ')) de un launch anterior:"
-  echo "  pararlo con: kill -TERM $(pgrep -f 'ros2 launch' | tr '\n' ' ')$(pgrep -x wallens_driver | tr '\n' ' ')"
+# El robot de la misión es el servicio wallens-mision (systemd/wallens-mision.service): arrancarlo para wallens.service
+# (mismo bus) y systemd nunca deja dos drivers ni nodos huérfanos. Si ya corre se deja: desplegar.sh lo reinicia cuando
+# cambia algo que usa. sudo -n: la regla de systemd/sudoers-wallens (scripts/04-servicio.sh) no pide contraseña.
+if ! sudo -n systemctl start wallens-mision; then
+  echo "No pude arrancar wallens-mision. ¿Falta instalarlo? En la Pi: sudo ~/wallens/scripts/04-servicio.sh"
   exit 1
 fi
-if [ -z "$launch" ]; then
-  setsid nohup ros2 launch ~/wallens/launch/mision.launch.py depuracion:=true > "$LOG/launch.log" 2>&1 &
-  launch=$!
-  echo "mision.launch.py lanzado (PID $launch, log $LOG/launch.log)"
-fi
+desde=$(systemctl show -p ActiveEnterTimestamp --value wallens-mision)
+echo "wallens-mision activo desde $desde (log: journalctl -u wallens-mision)"
 
 echo "preflight (espera a que los nodos publiquen, ~20 s)..."
 if ! python3 ~/wallens/scripts/preflight.py --dejar $CAMARA --esperar 40 > "$LOG/preflight.txt" 2>&1; then
   cat "$LOG/preflight.txt"
-  if ! kill -0 "$launch" 2>/dev/null; then
-    echo "mision.launch.py se cayó:"; grep -E "FATAL|ERROR" "$LOG/launch.log" | head -5 || true
-  fi
+  journalctl --no-pager _SYSTEMD_INVOCATION_ID="$(systemctl show -p InvocationID --value wallens-mision)" \
+    > "$LOG/launch.log" 2>&1 || true
+  echo "errores del servicio:"; grep -E "FATAL|ERROR|FALLO" "$LOG/launch.log" | tail -5 || true
   echo "Preflight sin pasar: no se mueve nada."
   exit 1
 fi

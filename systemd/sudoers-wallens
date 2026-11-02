@@ -1,0 +1,5 @@
+# Lo instala scripts/04-servicio.sh en /etc/sudoers.d/wallens: los scripts del robot arrancan y paran sus servicios
+# sin pedir contraseña. Solo estos comandos exactos.
+wallens ALL=(root) NOPASSWD: /usr/bin/systemctl start wallens-mision, /usr/bin/systemctl stop wallens-mision, \
+  /usr/bin/systemctl restart wallens-mision, /usr/bin/systemctl start wallens, /usr/bin/systemctl stop wallens, \
+  /usr/bin/systemctl restart wallens

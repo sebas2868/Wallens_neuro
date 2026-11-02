@@ -150,16 +150,26 @@ limpios porque las frutas están demasiado juntas.
 
 ### Probar en el robot
 
-Por etapas, de la más corta a la completa; cada una prueba una pieza nueva y el launch queda corriendo entre ellas:
+Un comando desde el PC por prueba, por etapas de la más corta a la completa. `scripts/probar.sh` corre los tests,
+despliega, corre la etapa en la Pi (`probar-mision.sh`) y trae el registro y los cuadros a `registros/` (no se sube a
+git). En la Pi el robot de la misión es el servicio `wallens-mision` (`systemd/wallens-mision.service`, instalado por
+`sudo scripts/04-servicio.sh` una vez): arrancarlo para `wallens` (mismo bus, `Conflicts=`), queda corriendo entre
+etapas y `desplegar.sh` lo reinicia cuando cambia algo que usa. Así nunca hay dos drivers, nodos huérfanos ni código
+viejo corriendo (los tres problemas de lanzarlo a mano). La regla `systemd/sudoers-wallens` deja arrancar y parar los
+dos servicios sin contraseña.
 
 ```
-~/wallens/scripts/probar-mision.sh agarre          # limón 33 cm detrás, en el eje: cam_garra + gripper (~20 s)
-~/wallens/scripts/probar-mision.sh agarre          # otra vez: ya usa el x_agarre/y_agarre medido
-~/wallens/scripts/probar-mision.sh acercar         # limón 1.2 m al frente: cam_frutas, acercarse y girar 180°
-~/wallens/scripts/probar-mision.sh hasta-agarrar   # lo anterior y agarrarlo
-~/wallens/scripts/probar-mision.sh                 # completa: lo deja donde arrancó el robot y se aparta
-MAS="-p w_max:=0.45" ~/wallens/scripts/probar-mision.sh acercar   # cualquier campo numérico de Config, sin redesplegar
+scripts/probar.sh agarre          # limón 33 cm detrás, en el eje: cam_garra + gripper (~20 s)
+scripts/probar.sh agarre          # otra vez: ya usa el x_agarre/y_agarre medido
+scripts/probar.sh acercar         # limón 1.2 m al frente: cam_frutas, acercarse y girar 180°
+scripts/probar.sh hasta-agarrar   # lo anterior y agarrarlo
+scripts/probar.sh                 # completa: lo deja donde arrancó el robot y se aparta
+MAS="-p w_max:=0.45" scripts/probar.sh acercar   # cualquier campo numérico de Config
 ```
+
+Al terminar, `sudo systemctl start wallens` (o reiniciar la Pi) vuelve al robot normal. Regla para los fallos: cada
+fallo del robot real se reproduce primero en un test con lo grabado (cuadros de `registros/…/cuadros`, `mision.log`) y
+luego se corrige.
 
 **Calibración del agarre, sin copiarla a mano:** una misión que termina bien y vio la fruta agarrada en ≥ 5 cuadros
 guarda dónde la ve `cam_garra` en `~/.config/wallens/agarre.yaml` (en la Pi, fuera de `~/wallens`: el rsync no la
@@ -171,14 +181,15 @@ del suelo y hay que revisarlo si se recalibra `cam_garra`.
 El preflight espera el primer cuadro de cada cámara (abrir tarda 3.5 s `cam_frutas`, 1.3 s `cam_garra`), mide 2 s y
 deja encendida la que la misión usa primero, así `INICIO` no espera a abrirla otra vez.
 
-Para el servicio `wallens` (pide sudo), lanza `mision.launch.py` con `depuracion:=true` si no corre, pasa el
+`probar-mision.sh` arranca `wallens-mision` (`mision.launch.py` con `depuracion:=true`) si no corre, pasa el
 **preflight** (`scripts/preflight.py`: servicio, una copia de cada nodo, frecuencias, brazo, error de hardware del
 gripper, cada cámara 4 s, batería, CPU) y solo entonces lanza la misión. Todo queda en `~/.cache/wallens/mision-<fecha>/`
 y el último cuadro de cada cámara, con las manchas, en `~/.cache/wallens/detector/`. El pedido es **relativo al robot**
-al lanzar la misión (`relativo:=true`), así que no importa desde cuándo corre el launch.
+al lanzar la misión (`relativo:=true`), así que no importa desde cuándo corre el servicio. Si el preflight falla, deja
+en `launch.log` el journal del servicio e imprime sus errores.
 
 Desde el PC: `scripts/desplegar.sh` (tests → rsync de lo que cambió → compila solo los paquetes tocados → md5 de fuente
-e instalado → dice qué relanzar). Umbrales de color: `scripts/vision/camara.py grabar|evaluar` (graba 20 s y corre el
+e instalado → reinicia el servicio activo si cambió algo que usa); `probar.sh` lo llama solo. Umbrales de color: `scripts/vision/camara.py grabar|evaluar` (graba 20 s y corre el
 mismo filtro que el detector sobre los cuadros, con los umbrales que se le den).
 
 ### Órdenes del nodo del brazo
