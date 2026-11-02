@@ -1,11 +1,12 @@
 """Pruebas del módulo `brazo` contra el bus falso, sin motores ni ROS.
 Uso (desde scripts/):  python3 -m unittest brazo.test_brazo -v"""
 import os
+import re
 import tempfile
 import unittest
 from dataclasses import replace
 
-from brazo import AbortoDuro, AbortoSuave, Brazo, Cero, Config, ErrorBus, PINZA, TORNILLO
+from brazo import AbortoDuro, AbortoSuave, Brazo, BusRos, Cero, Config, ErrorBus, PINZA, TORNILLO
 from brazo.falso import BusFalso
 
 CAL = {"abajo": 24245, "arriba": -13399, "abajo_util": 24245, "arriba_util": -11517, "sentido_abajo": 1}
@@ -303,6 +304,187 @@ class TestWatchdog(Base):
         b.reanudar_watchdog()
         b._pausa(1)
         self.assertEqual(self.bus.tornillo.regs[64], 1)
+
+
+class TestLecturasPorIteracion(Base):
+    """El bus se comparte con las ruedas: sobran ~13 ms por ciclo, o sea un bloque de un motor (docs/brazo-bus-plan.md)."""
+
+    def test_vigilar_lee_un_bloque_por_motor_y_nada_mas(self):
+        b = self.listo()
+        sueltas, bloques = self.bus.lecturas, self.bus.lecturas_bloque
+        b._vigilar()
+        self.assertEqual(self.bus.lecturas_bloque - bloques, 2)
+        self.assertEqual(self.bus.lecturas - sueltas, 0)
+
+    def test_pos_y_corriente_salen_del_bloque_de_la_iteracion(self):
+        b = self.listo()
+        b._vigilar()
+        sueltas = self.bus.lecturas
+        b._pos(TORNILLO), b._corriente(TORNILLO), b._pos(PINZA), b._corriente(PINZA)
+        self.assertEqual(self.bus.lecturas, sueltas)
+
+    def test_una_escritura_o_una_espera_invalidan_la_muestra(self):
+        b = self.listo()
+        b._vigilar()
+        b._escribir(PINZA, 116, 4, 3000)
+        sueltas = self.bus.lecturas
+        b._pos(PINZA)
+        self.assertEqual(self.bus.lecturas, sueltas + 1)       # lectura nueva
+        b._vigilar()
+        b._dormir(0.05)
+        sueltas = self.bus.lecturas
+        b._corriente(TORNILLO)
+        self.assertEqual(self.bus.lecturas, sueltas + 1)
+
+    def test_un_movimiento_completo_casi_no_hace_lecturas_sueltas(self):
+        b = self.listo()
+        sueltas, bloques = self.bus.lecturas, self.bus.lecturas_bloque
+        b.subir()
+        self.assertGreater(self.bus.lecturas_bloque - bloques, 20)
+        self.assertLessEqual(self.bus.lecturas - sueltas, 6)    # solo las de antes y después del bucle
+
+    def test_error_de_hardware_en_el_bloque_lee_el_registro_70_para_el_mensaje(self):
+        b = self.listo()
+        self.bus.pinza.regs[70] = 32
+        with self.assertRaisesRegex(AbortoDuro, "registro 70 = 32"):
+            b._vigilar()
+
+
+class DriverFalso:
+    """Transporte que hace lo que el servicio del driver: ejecuta en orden sobre un bus (aquí el falso) y aplica
+    la lista blanca de ids y direcciones de bus_brazo.hpp."""
+
+    def __init__(self, bus, rangos, ids=(3, 5)):
+        self.bus, self.rangos, self.ids = bus, rangos, ids
+        self.llamadas = 0
+
+    def permitida(self, o):
+        if o["id"] not in self.ids:
+            return False
+        if o["tipo"] == 2:
+            return True
+        ini, fin = o["direccion"], o["direccion"] + o["largo"] - 1
+        return any(a <= ini and fin <= b for a, b in self.rangos)
+
+    def __call__(self, operaciones):
+        self.llamadas += 1
+        res = []
+        for o in operaciones:
+            r = {"estado": 0, "comunicacion": 0, "error_motor": 0, "valor": 0, "datos": b""}
+            res.append(r)
+            if not self.permitida(o):
+                r["estado"] = 2
+                break
+            try:
+                if o["tipo"] == 2:
+                    r["valor"] = self.bus.ping(o["id"])
+                elif o["tipo"] == 1:
+                    self.bus.escribir(o["id"], o["direccion"], o["largo"], o["valor"])
+                elif o["largo"] > 4:
+                    r["datos"], r["error_motor"] = self.bus.leer_bloque(o["id"], o["direccion"], o["largo"])
+                else:
+                    r["valor"] = self.bus.leer(o["id"], o["direccion"], o["largo"])
+            except ErrorBus:
+                r["estado"], r["comunicacion"] = 3, -3001
+                break
+        return {"aceptada": True, "motivo": "", "resultados": res}
+
+
+def rangos_del_driver():
+    """Rangos permitidos tal como están escritos en bus_brazo.hpp (una sola fuente de verdad)."""
+    ruta = os.path.join(os.path.dirname(__file__), "..", "..", "ros", "wallens_driver", "include", "wallens_driver", "bus_brazo.hpp")
+    with open(ruta) as f:
+        texto = f.read()
+    bloque = re.search(r"rangos\{(.*?)\};", texto, re.S).group(1)
+    return [(int(a), int(b)) for a, b in re.findall(r"\{(\d+),\s*(\d+)\}", bloque)]
+
+
+class TestBusRos(Base):
+    def setUp(self):
+        super().setUp()
+        self.driver = DriverFalso(self.bus, rangos_del_driver())
+        self.ros = BusRos(self.driver)
+
+    def test_misma_interfaz_que_el_sdk(self):
+        self.assertEqual(self.ros.ping(TORNILLO), 1030)
+        self.ros.escribir(PINZA, 116, 4, 3000)
+        self.assertEqual(self.ros.leer(PINZA, 116, 4), 3000)
+        datos, estado = self.ros.leer_bloque(TORNILLO, 126, 21)
+        self.assertEqual((len(datos), estado), (21, 0))
+
+    def test_el_brazo_completo_corre_sobre_busros(self):
+        b = Brazo(self.ros, CAL, Config(), reloj=self.bus.reloj, cero=Cero(self.ruta_cero), log=lambda *_: None)
+        b.preparar()
+        b.energizar()
+        b.calibrar()
+        b.subir()
+        self.bus.pinza.objeto = OBJETO
+        self.assertEqual(b.recoger(), "agarrado")
+        self.assertTrue(b.apagar())
+
+    def test_todo_lo_que_usa_el_brazo_esta_en_la_lista_blanca(self):
+        """Cada ID y registro que toca Brazo en un recorrido completo debe estar permitido por el driver."""
+        usados = []
+        bus = self.bus
+        for nombre in ("leer", "escribir", "leer_bloque", "ping"):
+            original = getattr(bus, nombre)
+
+            def envuelto(*a, _o=original, _n=nombre):
+                usados.append((_n,) + a)
+                return _o(*a)
+            setattr(bus, nombre, envuelto)
+        b = self.listo()
+        b.subir()
+        bus.pinza.objeto = OBJETO
+        b.recoger()
+        b.soltar()
+        b.congelar()
+        b.apagar()
+        self.assertGreater(len(usados), 100)
+        permitidas = DriverFalso(bus, rangos_del_driver())
+        for nombre, i, *resto in usados:
+            addr = resto[0] if resto else 0
+            n = resto[1] if resto else 0
+            op = {"tipo": 2 if nombre == "ping" else 0, "id": i, "direccion": addr, "largo": n, "valor": 0}
+            self.assertTrue(permitidas.permitida(op), f"{nombre} id={i} dir={addr} largo={n} no está en la lista blanca")
+
+    def test_el_id_y_el_baudrate_no_estan_en_los_rangos(self):
+        for a, b in rangos_del_driver():
+            self.assertFalse(a <= 8 and b >= 7, f"el rango {a}-{b} toca el ID (7) o el baudrate (8)")
+
+    def test_una_lectura_se_repite_una_vez_y_una_escritura_no(self):
+        llamadas = []
+
+        def cae(ops):
+            llamadas.append(ops[0]["tipo"])
+            raise ErrorBus("el driver no respondió")
+        ros = BusRos(cae)
+        with self.assertRaises(ErrorBus):
+            ros.leer(PINZA, 132, 4)
+        self.assertEqual(llamadas, [0, 0])
+        llamadas.clear()
+        with self.assertRaises(ErrorBus):
+            ros.escribir(PINZA, 116, 4, 3000)
+        self.assertEqual(llamadas, [1])
+
+    def test_llamada_rechazada_o_motor_con_error_es_errorbus(self):
+        rechaza = BusRos(lambda ops: {"aceptada": False, "motivo": "cola llena", "resultados": []})
+        with self.assertRaisesRegex(ErrorBus, "cola llena"):
+            rechaza.leer(PINZA, 132, 4)
+        self.driver.ids = (3,)                                  # el ID 5 queda fuera de la lista blanca
+        with self.assertRaisesRegex(ErrorBus, "lista blanca"):
+            self.ros.leer(PINZA, 132, 4)
+        self.bus.pinza.regs[70] = 32
+        datos, estado = self.ros.leer_bloque(TORNILLO, 126, 21)  # la alerta del bloque se entrega, no se lanza
+        self.assertEqual(estado, 0)
+
+    def test_un_fallo_del_driver_en_marcha_es_aborto_duro(self):
+        b = Brazo(self.ros, CAL, Config(), reloj=self.bus.reloj, cero=Cero(self.ruta_cero), log=lambda *_: None)
+        b.preparar()
+        b.energizar()
+        self.bus.fallos[(TORNILLO, 132)] = "sin respuesta"
+        with self.assertRaises(AbortoDuro):
+            b._vigilar()
 
 
 if __name__ == "__main__":

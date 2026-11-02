@@ -200,6 +200,40 @@ Ningún paso 1–5 mueve un motor. Los pasos 1–5 se pueden hacer con tests; el
    - **con estos números se decide si hay que subir el baudrate**.
 7. **Aparte, cuando se repare el tornillo**: método de cero sin golpear topes duros, y las etapas 1, 3, 4 y 5 de gripper-plan.md.
 
+## Estado (2026-11-01, noche)
+
+Pasos 1–4 hechos y probados sin motores; el 5 y el 6 siguen pendientes.
+
+| Paso | Estado |
+|---|---|
+| 1 commit del brazo | `bc13836` |
+| 2 `wallens_interfaces` | `5464ab7` y `48f4f2c`; compila en la Pi (workspace aparte `~/ws_interfaces`) |
+| 3 `BusBrazo` + servicio | `48f4f2c`: 18 tests gtest (también con ThreadSanitizer y ASan/UBSan en el PC), driver compila en la Pi, `brazo_habilitado: false` |
+| 4 `BusRos` + `leer_bloque` | 46 tests de Python (`cd scripts && python3 -m unittest brazo.test_brazo`) |
+
+Desviaciones respecto al plan, ya aplicadas:
+
+- `BusBrazo` no recibe `PortHandler`/`PacketHandler` sino una interfaz `PuertoDxl` (ping, leer, escribir); `PuertoSdk`
+  (`puerto_sdk.hpp`) la implementa con el SDK. Así los tests usan un puerto falso sin enlazar el SDK.
+- El callback del servicio usa el patrón de respuesta diferida de rclcpp: encola y devuelve; el hilo de motores termina la
+  llamada y deja la respuesta en una lista; un timer del executor (10 ms) la envía. El hilo de tiempo real nunca publica
+  por DDS. La latencia total es de uno o dos ciclos (33–66 ms).
+- `ResultadoDxl.comunicacion` es `int16`: los códigos COMM del SDK llegan a -9000 y no caben en `int8`.
+- Un error de motor con solo la alerta de hardware (bit 7) se devuelve como `Ok` con `error_motor = 0x80` y no corta la
+  llamada; así se puede leer el registro 70 después. Cualquier otro bit de error es `ErrorMotor` y corta.
+- Mensaje nuevo `DiagnosticoBus` en `bus/diagnostico` (1 Hz): transacciones, rechazadas, cola, tiempo de bus, ciclos
+  atrasados (>1.5 periodos) y tardíos (>3 periodos).
+- Lista blanca por rangos de direcciones en `bus_brazo.hpp` (única fuente); un test de Python comprueba que todo lo que
+  `Brazo` toca en un recorrido completo está permitido y que ningún rango toca el ID (7) ni el baudrate (8).
+- `Brazo._vigilar` lee un solo bloque 126..146 por motor y `_pos`/`_corriente` reutilizan esa muestra hasta la siguiente
+  escritura o espera (test de regresión: 0 lecturas sueltas por iteración).
+- Con 57600 baud una operación cuesta ~5 ms (escritura de 4 bytes 5.2 ms, lectura de 4 bytes 5.5 ms): **una llamada de
+  12 ms admite solo 2 operaciones**. El cliente tiene que partir las secuencias largas (p. ej. las 4 escrituras de
+  `_mover`) en varias llamadas, o hay que subir el baudrate. `BusRos` manda una operación por llamada, lo que implica
+  ~33 ms por operación con la cola: **configurar un movimiento (4 escrituras) tardaría ~130 ms**. Medir en el paso 6;
+  si es mucho, agrupar en llamadas de 2 operaciones o subir a 1 Mbps.
+- `--bus=sdk|ros` ya está en `prueba-brazo.py` y `diagnostico-pinza.py`.
+
 ## Criterios de "listo"
 
 - Con `brazo_habilitado:=false` el driver es indistinguible del actual (mismos tests, mismo odómetro, mismos avisos).

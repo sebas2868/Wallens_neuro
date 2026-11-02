@@ -7,7 +7,9 @@ Para cada estrategia: cierra un poco, abre, aplica la estrategia y mide 3 s de p
   C  B + corriente baja (--reposo=N, por defecto 30, ~80 mA)
   D  torque apagado (la pinza debe quedarse sola; se vuelve a encender sin saltar)
 Imprime el recorrido pico a pico, las inversiones de sentido (≥2 ticks) y la corriente media de cada una.
-Uso (en la Pi, servicio parado, ROS cargado): python3 scripts/diagnostico-pinza.py [--reposo=N] [puerto]"""
+Uso (en la Pi, servicio parado, ROS cargado): python3 scripts/diagnostico-pinza.py [--reposo=N] [--bus=sdk|ros] [puerto]
+--bus=ros usa el servicio del driver (brazo_habilitado:=true); cada lectura espera hasta un ciclo (33 ms), así que no sirve
+para medir a 50 Hz: para este diagnóstico use sdk."""
 import json
 import os
 import signal
@@ -15,13 +17,14 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from brazo import AbortoDuro, AbortoSuave, Brazo, Config, SdkBus  # noqa: E402
+from brazo import AbortoDuro, AbortoSuave, Brazo, Config, ErrorBus, abrir_bus  # noqa: E402
 from brazo.brazo import CORRIENTE_META, PINZA, POS_META, TORQUE  # noqa: E402
 
 _opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
 PUERTO = _args[0] if _args else "/dev/dynamixel"
 REPOSO = int(_opts.get("reposo", 30))
+MODO_BUS = _opts.get("bus", "sdk")
 CAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibracion-tornillo.json")
 CIERRE = 400            # ticks que se cierra antes de cada apertura
 MEDIR = 3.0             # s de medición
@@ -82,17 +85,19 @@ def volver_a_energizar(b):
 
 def main():
     try:
-        if subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0:
+        if MODO_BUS == "sdk" and subprocess.call(["systemctl", "is-active", "--quiet", "wallens"]) == 0:
             sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
     except FileNotFoundError:
         pass
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt))
     with open(CAL) as f:
         cal = json.load(f)
-    bus = SdkBus(PUERTO)
+    try:
+        bus, cerrar_bus = abrir_bus(MODO_BUS, PUERTO)
+    except ErrorBus as e:
+        sys.exit(str(e))
     b = Brazo(bus, cal, Config(), usar_tornillo=False)
     try:
-        bus.abrir()
         b.preparar()
         input("Solo se mueve el gripper, en vacío, y la mano fuera de los dedos. Enter para mover (Ctrl+C cancela)... ")
         b.energizar()
@@ -112,7 +117,7 @@ def main():
     finally:
         print("Torque apagado" if b.apagar() else "No pude confirmar el apagado del torque: desconecta la alimentación")
         try:
-            bus.cerrar()
+            cerrar_bus()
         except Exception:
             pass
 

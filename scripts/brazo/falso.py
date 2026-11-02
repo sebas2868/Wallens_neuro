@@ -91,6 +91,8 @@ class BusFalso:
         self.tope_abajo = tope_abajo
         self.disparadores = []                 # funciones(bus) que corren en cada paso
         self.fallos = {}                       # (id, addr) -> mensaje: lecturas/escrituras que fallan
+        self.lecturas_bloque = 0               # transacciones de bloque (leer_bloque)
+        self.lecturas = 0                      # lecturas sueltas (leer)
         self.reloj = RelojFalso(self)
 
     @property
@@ -135,8 +137,23 @@ class BusFalso:
         self._motor(i, -1)
         return 1030
 
+    def leer_bloque(self, i, addr, n):
+        """(bytes, estado): una sola transacción; el estado trae la alerta de hardware (bit 7) si el registro 70 != 0."""
+        for a in range(addr, addr + n):
+            if (i, a) in self.fallos:
+                raise ErrorBus(f"ID {i}: {self.fallos[(i, a)]} ({a})")
+        m = self._motor(i, addr)
+        self.lecturas_bloque += 1
+        datos = bytearray(n)
+        for a, ancho, valor in ((126, 2, m.cur & 0xFFFF), (132, 4, int(m.pos) & 0xFFFFFFFF),
+                                (144, 2, m.regs.get(144, 0)), (146, 1, m.regs.get(146, 0))):
+            if addr <= a and a + ancho <= addr + n:
+                datos[a - addr:a - addr + ancho] = valor.to_bytes(ancho, "little")
+        return bytes(datos), (0x80 if m.regs.get(70) else 0)
+
     def leer(self, i, addr, n):
         m = self._motor(i, addr)
+        self.lecturas += 1
         if addr == 126:
             return m.cur & 0xFFFF
         if addr == 132:

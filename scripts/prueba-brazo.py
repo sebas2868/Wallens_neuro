@@ -6,7 +6,9 @@
   --etapa=4  combinado con un objeto blando y liviano: --corridas=N (por defecto 5), todas deben agarrar.
   --etapa=5  igual que la 4 con el objeto real.
 Uso (en la Pi, con el servicio parado y ROS cargado para el SDK):
-  python3 scripts/prueba-brazo.py --etapa=N [--corridas=N] [--busqueda=N] [--velocidad=N] [puerto]
+  python3 scripts/prueba-brazo.py --etapa=N [--corridas=N] [--busqueda=N] [--velocidad=N] [--bus=sdk|ros] [puerto]
+  --bus=sdk (por defecto): abre el puerto, con el servicio wallens parado. Para toda prueba nueva con motores.
+  --bus=ros: usa el servicio brazo/transaccion del driver (servicio activo con brazo_habilitado:=true, ruedas a velocidad 0).
 Anomalía suave (atasco, corriente, resbalón): congela con torque y espera tu Enter para abrir y apagar.
 Anomalía dura (hardware, voltaje, comunicación) o Ctrl+C: torque off de inmediato (suelta el objeto)."""
 import json
@@ -17,13 +19,14 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from brazo import AbortoDuro, AbortoSuave, Brazo, Config, SdkBus  # noqa: E402
+from brazo import AbortoDuro, AbortoSuave, Brazo, Config, ErrorBus, abrir_bus  # noqa: E402
 
 _opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
 PUERTO = _args[0] if _args else "/dev/dynamixel"
 CAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibracion-tornillo.json")
 ETAPA = int(_opts.get("etapa", 0))
+MODO_BUS = _opts.get("bus", "sdk")
 CORRIDAS = int(_opts.get("corridas", 5))
 HOMING_MAX, ERROR_MAX, CORRIENTE_MAX = 70, 8, 250   # criterios de la etapa 1 (docs/gripper-plan.md)
 
@@ -107,7 +110,7 @@ ETAPAS = {1: etapa1, 2: etapa2, 3: etapa3, 4: etapa45, 5: etapa45}
 def main():
     if ETAPA not in ETAPAS:
         sys.exit(__doc__)
-    if servicio_activo():
+    if MODO_BUS == "sdk" and servicio_activo():
         sys.exit("El servicio wallens usa el bus de los motores: sudo systemctl stop wallens")
     signal.signal(signal.SIGTERM, salir)
     signal.signal(signal.SIGHUP, salir)
@@ -118,11 +121,13 @@ def main():
         cfg.vel_busqueda = int(_opts["busqueda"])
     with open(CAL) as f:
         cal = json.load(f)
-    bus = SdkBus(PUERTO)
+    try:
+        bus, cerrar_bus = abrir_bus(MODO_BUS, PUERTO)
+    except ErrorBus as e:
+        sys.exit(str(e))
     b = Brazo(bus, cal, cfg)
     invalidar = False
     try:
-        bus.abrir()
         b.preparar()
         input(f"ETAPA {ETAPA}. Mano en el interruptor, gripper y tornillo libres. Enter para mover (Ctrl+C cancela)... ")
         b.energizar()
@@ -149,7 +154,7 @@ def main():
         print("Torque apagado" if b.apagar(invalidar_cero=invalidar) else
               "No pude confirmar el apagado del torque: desconecta la alimentación de los motores")
         try:
-            bus.cerrar()
+            cerrar_bus()
         except Exception:
             pass
 

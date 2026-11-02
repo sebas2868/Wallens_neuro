@@ -23,6 +23,7 @@ MODO, LIMITE_CORRIENTE, LIM_POS_MAX, LIM_POS_MIN = 11, 38, 48, 52
 TORQUE, ERROR_HW, WATCHDOG = 64, 70, 98
 CORRIENTE_META, ACELERACION, VELOCIDAD, POS_META = 102, 108, 112, 116
 CORRIENTE_ACTUAL, POS_ACTUAL, VOLTAJE, TEMPERATURA = 126, 132, 144, 146
+BLOQUE = TEMPERATURA - CORRIENTE_ACTUAL + 1       # 21 bytes: de la corriente a la temperatura
 
 
 class Aborto(Exception):
@@ -118,6 +119,7 @@ def con_signo(v, bits):
 
 class Brazo:
     def __init__(self, bus, cal, cfg=None, reloj=None, cero=None, log=print, usar_tornillo=True):
+        self._muestra = {}                                  # pos y corriente del último bloque leído por _vigilar
         self.ids = (TORNILLO, PINZA) if usar_tornillo else (PINZA,)     # sin tornillo solo se toca el gripper
         self.bus, self.cfg, self.reloj, self.log = bus, cfg or Config(), reloj or Reloj(), log
         self.cero = cero or Cero()
@@ -137,37 +139,61 @@ class Brazo:
         except ErrorBus as e:
             raise AbortoDuro(str(e)) from e
 
+    def _dormir(self, segundos):
+        self._muestra = {}                       # lo leído antes de dormir ya no vale
+        self.reloj.dormir(segundos)
+
     def _escribir(self, i, addr, n, v):
+        self._muestra = {}
         try:
             self.bus.escribir(i, addr, n, v)
         except ErrorBus as e:
             raise AbortoDuro(str(e)) from e
 
     def _pos(self, i):
+        if "pos" in self._muestra.get(i, ()):
+            return self._muestra[i].pop("pos")
         return con_signo(self._leer(i, POS_ACTUAL, 4), 32)
 
     def _corriente(self, i):
+        if "cor" in self._muestra.get(i, ()):
+            return self._muestra[i].pop("cor")
         return con_signo(self._leer(i, CORRIENTE_ACTUAL, 2), 16)
 
     def _vigilar(self):
-        """Revisa la salud de los motores; además mantiene vivo el watchdog."""
+        """Revisa la salud de los motores y mantiene vivo el watchdog. Lee un solo bloque por motor
+        (126..146: corriente, velocidad, posición, voltaje, temperatura; el estado del paquete trae el error de
+        hardware) y deja la posición y la corriente para que `_pos` y `_corriente` no vuelvan al bus en esta iteración:
+        con el bus compartido con las ruedas sobran pocos ms por ciclo (docs/brazo-bus-plan.md)."""
+        self._muestra = {}
         for i in self.ids:
-            hw = self._leer(i, ERROR_HW, 1)
-            if hw:
-                raise AbortoDuro(f"ID {i}: error de hardware 0x{hw:02x} (1=voltaje, 4=sobrecalent., 32=sobrecarga)")
-            t = self._leer(i, TEMPERATURA, 1)
+            try:
+                datos, estado = self.bus.leer_bloque(i, CORRIENTE_ACTUAL, BLOQUE)
+            except ErrorBus as e:
+                raise AbortoDuro(str(e)) from e
+            if estado:
+                try:
+                    hw = self.bus.leer(i, ERROR_HW, 1)
+                except ErrorBus:
+                    hw = None
+                raise AbortoDuro(f"ID {i}: error de hardware (estado 0x{estado:02x}, registro 70 = {hw}; "
+                                 "1=voltaje, 4=sobrecalent., 32=sobrecarga)")
+            cor = con_signo(int.from_bytes(datos[0:2], "little"), 16)
+            pos = con_signo(int.from_bytes(datos[POS_ACTUAL - CORRIENTE_ACTUAL:][:4], "little"), 32)
+            v = int.from_bytes(datos[VOLTAJE - CORRIENTE_ACTUAL:][:2], "little") / 10
+            t = datos[TEMPERATURA - CORRIENTE_ACTUAL]
             if t > self.cfg.temp_max:
                 raise AbortoDuro(f"ID {i}: temperatura {t} °C > {self.cfg.temp_max}")
-            v = self._leer(i, VOLTAJE, 2) / 10
             if not self.cfg.voltaje[0] <= v <= self.cfg.voltaje[1]:
                 raise AbortoDuro(f"ID {i}: voltaje {v} V fuera de {self.cfg.voltaje[0]}-{self.cfg.voltaje[1]}")
+            self._muestra[i] = {"pos": pos, "cor": cor}
 
     def _pausa(self, segundos):
         """Espera vigilando, para que el watchdog no tome la espera por un corte."""
         fin = self.reloj.ahora() + segundos
         while self.reloj.ahora() < fin:
             self._vigilar()
-            self.reloj.dormir(self.cfg.periodo)
+            self._dormir(self.cfg.periodo)
 
     def _exigir_calibrado(self):
         if self.abajo is None:
@@ -266,7 +292,7 @@ class Brazo:
         self._escribir(PINZA, POS_META, 4, destino)
         inicio, mala = self.reloj.ahora(), 0
         while abs(self._pos(PINZA) - destino) > c.llegada_p:
-            self.reloj.dormir(c.periodo)
+            self._dormir(c.periodo)
             self._vigilar()
             mala = mala + 1 if abs(self._corriente(PINZA)) > c.corriente_aborto_p else 0
             if mala >= c.lecturas_aborto:
@@ -289,7 +315,7 @@ class Brazo:
         self._escribir(PINZA, POS_META, 4, self.tope_apriete)
         historial, inicio, contacto = [], self.reloj.ahora(), None
         while True:
-            self.reloj.dormir(c.periodo)
+            self._dormir(c.periodo)
             self._vigilar()
             actual, cor = self._pos(PINZA), self._corriente(PINZA)
             historial = (historial + [(actual, abs(cor))])[-3:]
@@ -308,7 +334,7 @@ class Brazo:
         self._escribir(PINZA, POS_META, 4, meta)    # deja de empujar hacia el tope; desde aquí sube de a poco
         fin = self.reloj.ahora() + c.tiempo_apriete
         while self.reloj.ahora() < fin:
-            self.reloj.dormir(c.periodo)
+            self._dormir(c.periodo)
             self._vigilar()
             actual, cor = self._pos(PINZA), self._corriente(PINZA)
             if abs(cor) < c.corriente_apriete and meta < self.tope_apriete:
@@ -342,7 +368,7 @@ class Brazo:
         pos_ventana, mala, atasco, bajas, c_max = self._pos(TORNILLO), 0, 0, 0, 0
         limite_c = max(c.corriente_aborto_t, corriente_max)
         while True:
-            self.reloj.dormir(c.periodo)
+            self._dormir(c.periodo)
             self._vigilar()
             actual, cor = self._pos(TORNILLO), self._corriente(TORNILLO)
             c_max = max(c_max, abs(cor))
@@ -380,7 +406,7 @@ class Brazo:
         t0 = ultima = self.reloj.ahora()
         pos_ventana, paradas = inicio_pos, 0
         while True:
-            self.reloj.dormir(c.periodo)
+            self._dormir(c.periodo)
             self._vigilar()
             actual, cor = self._pos(TORNILLO), self._corriente(TORNILLO)
             ahora = self.reloj.ahora()
@@ -474,7 +500,7 @@ class Brazo:
         self.log(f">>> OBJETO ARRIBA: sosteniendo {self.cfg.sosten} s")
         fin = self.reloj.ahora() + self.cfg.sosten
         while self.reloj.ahora() < fin:
-            self.reloj.dormir(self.cfg.periodo)
+            self._dormir(self.cfg.periodo)
             self._vigilar()
             if self._pos(PINZA) - fuerza > self.cfg.desliz_ticks:
                 raise AbortoSuave("El objeto se resbala mientras se sostiene")

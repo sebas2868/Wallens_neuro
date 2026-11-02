@@ -43,6 +43,14 @@ class SdkBus:
             raise ErrorBus(f"ID {i}: fallo leyendo {addr} (res={res}, err={err})")
         return v
 
+    def leer_bloque(self, i, addr, n):
+        """(bytes, estado): n bytes desde addr en una sola transacción. El estado es el byte de error del
+        paquete (bit 7 = alerta de hardware): no lanza por él, para que quien llama decida."""
+        datos, res, err = self._h.readTxRx(self._p, i, addr, n)
+        if res != 0:
+            raise ErrorBus(f"ID {i}: fallo leyendo el bloque {addr}+{n} (res={res})")
+        return bytes(datos), err
+
     def escribir(self, i, addr, n, v):
         f = {1: self._h.write1ByteTxRx, 2: self._h.write2ByteTxRx, 4: self._h.write4ByteTxRx}[n]
         res, err = f(self._p, i, addr, v & 0xFFFFFFFF if n == 4 else v)
