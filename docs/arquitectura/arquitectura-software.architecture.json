@@ -384,6 +384,15 @@
         "Parada por software y vigilancia del bus de 200 ms",
         "Corte por batería baja"
       ]
+    },
+    {
+      "dot": "amber",
+      "title": "Equipo",
+      "items": [
+        "Alejandra Obando",
+        "María Alejandra Bocanegra",
+        "Eduardo Galeano"
+      ]
     }
   ]
 }
