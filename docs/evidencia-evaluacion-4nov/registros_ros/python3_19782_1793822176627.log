@@ -1,0 +1,432 @@
+[INFO] [1793822177.194168832] [mision_frutas]: misión: Pedido(zona=(1.0, 0.0), radio=0.1, frutas=['limon'], entrega=(0.0, 0.0), angulo_linea=0.0, separacion=0.25, volver_home=False) desde=None hasta=None x_agarre=-0.23 y_agarre=0.0
+[INFO] [1793822179.476611671] [mision_frutas]: --- INICIO
+[WARN] [1793822179.481714261] [mision_frutas]: esperando: /battery_state, frutas/detecciones (detector_frutas con la cámara frutas)
+[WARN] [1793822179.577956579] [mision_frutas]: esperando: /battery_state
+[INFO] [1793822179.978812212] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822180.451010835] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822180.674392476] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793822180.997776869] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793822181.273251037] [mision_frutas]: --- RECONOCER
+[INFO] [1793822190.995538090] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.8263, 'y': 0.2271, 'd': 0.0268, 'px': 36}]
+[INFO] [1793822192.066304373] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.8549, 'y': 0.1872, 'd': 0.0726, 'px': 94}, {'tipo': 'mandarina', 'x': 0.7998, 'y': 0.0866, 'd': 0.0917, 'px': 128}]
+[INFO] [1793822195.709404835] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.8128, 'y': 0.1192, 'd': 0.0788, 'px': 108}, {'tipo': 'mandarina', 'x': 1.04, 'y': 0.0194, 'd': 0.0827, 'px': 86}, {'tipo': 'mandarina', 'x': 0.956, 'y': -0.0863, 'd': 0.1034, 'px': 118}]
+[INFO] [1793822196.850288704] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.0066, 'y': 0.0517, 'd': 0.0566, 'px': 61}, {'tipo': 'limon', 'x': 0.996, 'y': -0.0327, 'd': 0.055, 'px': 60}, {'tipo': 'naranja', 'x': 2.0369, 'y': -0.6235, 'd': 0.0238, 'px': 12}]
+[INFO] [1793822197.777618093] [mision_frutas]: --- IR_A_ZONA
+[INFO] [1793822197.905389155] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.0884, 'y': -0.0539, 'd': 0.0627, 'px': 62}, {'tipo': 'limon', 'x': 1.0884, 'y': -0.148, 'd': 0.0668, 'px': 66}]
+[WARN] [1793822198.873928009] [mision_frutas]: New publisher discovered on topic 'mision/pedido', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY
+[INFO] [1793822198.915912282] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.1146, 'y': -0.0603, 'd': 0.0665, 'px': 64}, {'tipo': 'limon', 'x': 1.1013, 'y': -0.1579, 'd': 0.0717, 'px': 70}]
+[INFO] [1793822199.990616569] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.956, 'y': -0.0228, 'd': 0.0552, 'px': 63}, {'tipo': 'naranja', 'x': 1.7459, 'y': -0.529, 'd': 0.0236, 'px': 14}]
+[INFO] [1793822200.074850723] [mision_frutas]: --- BUSCAR
+[INFO] [1793822201.092196154] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.9283, 'y': -0.0064, 'd': 0.0534, 'px': 63}, {'tipo': 'naranja', 'x': 1.4316, 'y': -0.4157, 'd': 0.0463, 'px': 34}]
+[INFO] [1793822201.877630298] [mision_frutas]: --- ACERCAR
+[INFO] [1793822202.134999207] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.9283, 'y': -0.0063, 'd': 0.0534, 'px': 63}, {'tipo': 'naranja', 'x': 1.4316, 'y': -0.4157, 'd': 0.0463, 'px': 34}]
+[INFO] [1793822203.211927984] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.8624, 'y': 0.0034, 'd': 0.0546, 'px': 70}, {'tipo': 'naranja', 'x': 1.5582, 'y': -0.4667, 'd': 0.0239, 'px': 16}]
+[INFO] [1793822204.246845694] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 0.7522, 'y': 0.2048, 'd': 0.0254, 'px': 38}, {'tipo': 'limon', 'x': 0.7752, 'y': 0.0056, 'd': 0.0525, 'px': 76}]
+[INFO] [1793822205.381271537] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.6741, 'y': 0.005, 'd': 0.0511, 'px': 87}]
+[INFO] [1793822206.505349795] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.5929, 'y': 0.0082, 'd': 0.0515, 'px': 102}]
+[INFO] [1793822207.575148301] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.7752, 'y': 0.094, 'd': 0.038, 'px': 55}, {'tipo': 'limon', 'x': 0.5067, 'y': 0.1055, 'd': 0.0649, 'px': 156}, {'tipo': 'limon', 'x': 0.4446, 'y': 0.0052, 'd': 0.0536, 'px': 152}, {'tipo': 'limon', 'x': 0.6304, 'y': -0.1524, 'd': 0.0527, 'px': 97}]
+[INFO] [1793822208.575424561] [mision_frutas]: --- GIRAR
+[INFO] [1793822209.999196601] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822211.076514835] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822212.142656304] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822213.199060682] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822214.273439408] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822215.340409543] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822216.409181445] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2771, 'y': 0.0729, 'tipo': '', 'area': 4040, 'candidatas': [{'x': -0.3172, 'y': 0.0023}, {'x': -0.2771, 'y': 0.0729}]}
+[INFO] [1793822217.484834519] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2892, 'y': -0.0206, 'tipo': 'limon', 'area': 12977, 'candidatas': [{'x': -0.3106, 'y': 0.0424}, {'x': -0.3195, 'y': -0.0909}, {'x': -0.2892, 'y': -0.0206}]}
+[INFO] [1793822218.276141753] [mision_frutas]: --- ABRIR
+[INFO] [1793822218.550259080] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2874, 'y': -0.0556, 'tipo': 'limon', 'area': 14200, 'candidatas': [{'x': -0.325, 'y': -0.0277}, {'x': -0.3133, 'y': 0.0085}, {'x': -0.2874, 'y': -0.0556}]}
+[INFO] [1793822218.776832545] [mision_frutas]: orden al brazo: bajar
+[INFO] [1793822219.610889235] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2899, 'y': -0.0562, 'tipo': 'limon', 'area': 14264, 'candidatas': [{'x': -0.3139, 'y': 0.0083}, {'x': -0.2899, 'y': -0.0562}, {'x': -0.239, 'y': -0.0104}]}
+[INFO] [1793822220.682710307] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2884, 'y': -0.056, 'tipo': 'limon', 'area': 14277, 'candidatas': [{'x': -0.3248, 'y': -0.0281}, {'x': -0.3133, 'y': 0.0085}, {'x': -0.2884, 'y': -0.056}, {'x': -0.2403, 'y': -0.0104}]}
+[INFO] [1793822221.747180844] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2926, 'y': -0.0563, 'tipo': 'limon', 'area': 14305, 'candidatas': [{'x': -0.3148, 'y': 0.0085}, {'x': -0.2926, 'y': -0.0563}, {'x': -0.2495, 'y': -0.0102}]}
+[INFO] [1793822222.813987625] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2919, 'y': -0.0566, 'tipo': 'limon', 'area': 14366, 'candidatas': [{'x': -0.3143, 'y': 0.0083}, {'x': -0.2919, 'y': -0.0566}, {'x': -0.2326, 'y': -0.005}]}
+[INFO] [1793822223.886476735] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2957, 'y': -0.0564, 'tipo': 'limon', 'area': 14508, 'candidatas': [{'x': -0.3159, 'y': 0.0086}, {'x': -0.2957, 'y': -0.0564}, {'x': -0.2507, 'y': -0.0102}]}
+[INFO] [1793822224.954211975] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2987, 'y': -0.0572, 'tipo': 'limon', 'area': 14525, 'candidatas': [{'x': -0.3168, 'y': 0.0083}, {'x': -0.2987, 'y': -0.0572}, {'x': -0.2503, 'y': -0.0102}]}
+[INFO] [1793822226.019458774] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2975, 'y': -0.0569, 'tipo': 'limon', 'area': 14684, 'candidatas': [{'x': -0.3163, 'y': 0.0084}, {'x': -0.28, 'y': 0.0103}, {'x': -0.2975, 'y': -0.0569}, {'x': -0.2503, 'y': -0.0102}]}
+[INFO] [1793822227.089769629] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3022, 'y': -0.0571, 'tipo': 'limon', 'area': 14679, 'candidatas': [{'x': -0.318, 'y': 0.0086}, {'x': -0.3022, 'y': -0.0571}]}
+[INFO] [1793822228.153107798] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3, 'y': -0.0574, 'tipo': 'limon', 'area': 14723, 'candidatas': [{'x': -0.3169, 'y': 0.0082}, {'x': -0.3, 'y': -0.0574}]}
+[INFO] [1793822229.218030994] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3036, 'y': -0.0573, 'tipo': 'limon', 'area': 14945, 'candidatas': [{'x': -0.3183, 'y': 0.0085}, {'x': -0.3036, 'y': -0.0573}]}
+[INFO] [1793822230.296471053] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3055, 'y': -0.0576, 'tipo': 'limon', 'area': 15095, 'candidatas': [{'x': -0.319, 'y': 0.0084}, {'x': -0.3055, 'y': -0.0576}]}
+[INFO] [1793822231.363997603] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3061, 'y': -0.0579, 'tipo': 'limon', 'area': 14868, 'candidatas': [{'x': -0.3188, 'y': 0.0083}, {'x': -0.3061, 'y': -0.0579}]}
+[INFO] [1793822232.424742985] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3086, 'y': -0.0582, 'tipo': 'limon', 'area': 14104, 'candidatas': [{'x': -0.3202, 'y': 0.0085}, {'x': -0.3086, 'y': -0.0582}]}
+[INFO] [1793822233.498925286] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3088, 'y': -0.0581, 'tipo': 'limon', 'area': 14064, 'candidatas': [{'x': -0.3204, 'y': 0.0087}, {'x': -0.3088, 'y': -0.0581}]}
+[INFO] [1793822234.564697300] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3099, 'y': -0.0582, 'tipo': 'limon', 'area': 13600, 'candidatas': [{'x': -0.3209, 'y': 0.0086}, {'x': -0.3099, 'y': -0.0582}]}
+[INFO] [1793822235.632394524] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3108, 'y': -0.0582, 'tipo': 'limon', 'area': 13169, 'candidatas': [{'x': -0.3216, 'y': 0.0088}, {'x': -0.3108, 'y': -0.0582}]}
+[INFO] [1793822236.699046073] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3124, 'y': -0.0587, 'tipo': 'limon', 'area': 12295, 'candidatas': [{'x': -0.3224, 'y': 0.0083}, {'x': -0.3124, 'y': -0.0587}]}
+[INFO] [1793822237.758615807] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3136, 'y': -0.0587, 'tipo': 'limon', 'area': 11482, 'candidatas': [{'x': -0.3136, 'y': -0.0587}]}
+[INFO] [1793822238.835119692] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2907, 'y': 0.0115, 'tipo': 'limon', 'area': 13736, 'candidatas': [{'x': -0.3142, 'y': -0.0587}, {'x': -0.2907, 'y': 0.0115}]}
+[INFO] [1793822239.899271414] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2924, 'y': 0.012, 'tipo': 'limon', 'area': 14699, 'candidatas': [{'x': -0.315, 'y': -0.0588}, {'x': -0.2924, 'y': 0.012}]}
+[INFO] [1793822240.311880428] [mision_frutas]: brazo: {'orden': 'bajar', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822240.573991263] [mision_frutas]: orden al brazo: abrir
+[INFO] [1793822240.979142759] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2895, 'y': 0.0098, 'tipo': 'limon', 'area': 17139, 'candidatas': [{'x': -0.3154, 'y': -0.0589}, {'x': -0.2895, 'y': 0.0098}]}
+[INFO] [1793822242.048857462] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2848, 'y': 0.0117, 'tipo': 'limon', 'area': 21103, 'candidatas': [{'x': -0.3154, 'y': -0.0589}, {'x': -0.2848, 'y': 0.0117}]}
+[INFO] [1793822242.448859368] [mision_frutas]: brazo: {'orden': 'abrir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822242.775005073] [mision_frutas]: --- RETROCEDER
+[INFO] [1793822243.102843284] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2834, 'y': 0.0138, 'tipo': 'limon', 'area': 21378, 'candidatas': [{'x': -0.3151, 'y': -0.0572}, {'x': -0.2834, 'y': 0.0138}]}
+[INFO] [1793822244.171726349] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.272, 'y': 0.041, 'tipo': 'limon', 'area': 25249, 'candidatas': [{'x': -0.3213, 'y': 0.0337}, {'x': -0.3122, 'y': -0.036}, {'x': -0.272, 'y': 0.041}]}
+[INFO] [1793822245.249026610] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2594, 'y': 0.0577, 'tipo': 'limon', 'area': 25194, 'candidatas': [{'x': -0.3286, 'y': -0.0951}, {'x': -0.3185, 'y': 0.0499}, {'x': -0.3088, 'y': -0.022}, {'x': -0.2594, 'y': 0.0577}]}
+[INFO] [1793822246.303877006] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3019, 'y': -0.0144, 'tipo': 'limon', 'area': 20330, 'candidatas': [{'x': -0.3258, 'y': -0.0933}, {'x': -0.3142, 'y': 0.0631}, {'x': -0.3019, 'y': -0.0144}, {'x': -0.2184, 'y': -0.0391}, {'x': -0.2341, 'y': 0.0657}]}
+[INFO] [1793822247.375701832] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2921, 'y': -0.0092, 'tipo': 'limon', 'area': 27267, 'candidatas': [{'x': -0.3232, 'y': -0.093}, {'x': -0.3097, 'y': 0.0688}, {'x': -0.2921, 'y': -0.0092}, {'x': -0.1985, 'y': 0.0728}]}
+[INFO] [1793822248.440727507] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.278, 'y': -0.0049, 'tipo': 'limon', 'area': 34628, 'candidatas': [{'x': -0.321, 'y': -0.0928}, {'x': -0.3061, 'y': 0.0729}, {'x': -0.278, 'y': -0.0049}, {'x': -0.1425, 'y': -0.0427}]}
+[INFO] [1793822249.514380212] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2652, 'y': -0.0044, 'tipo': 'limon', 'area': 42611, 'candidatas': [{'x': -0.3196, 'y': -0.0943}, {'x': -0.3042, 'y': 0.0753}, {'x': -0.2652, 'y': -0.0044}]}
+[INFO] [1793822250.588552951] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2528, 'y': -0.004, 'tipo': 'limon', 'area': 50422, 'candidatas': [{'x': -0.3194, 'y': 0.0327}, {'x': -0.3195, 'y': -0.0954}, {'x': -0.3038, 'y': 0.0772}, {'x': -0.2528, 'y': -0.004}]}
+[INFO] [1793822251.644780717] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2437, 'y': -0.0037, 'tipo': 'limon', 'area': 57322, 'candidatas': [{'x': -0.3182, 'y': 0.0339}, {'x': -0.3226, 'y': -0.0959}, {'x': -0.2437, 'y': -0.0037}]}
+[INFO] [1793822252.720658262] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2342, 'y': -0.0046, 'tipo': 'limon', 'area': 65057, 'candidatas': [{'x': -0.3172, 'y': 0.0343}, {'x': -0.3253, 'y': -0.097}, {'x': -0.2342, 'y': -0.0046}]}
+[INFO] [1793822253.576585077] [mision_frutas]: --- CERRAR
+[INFO] [1793822253.792073362] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2237, 'y': -0.0057, 'tipo': 'limon', 'area': 74866, 'candidatas': [{'x': -0.3164, 'y': 0.0347}, {'x': -0.2237, 'y': -0.0057}]}
+[INFO] [1793822254.173484046] [mision_frutas]: orden al brazo: cerrar:limon
+[INFO] [1793822254.848212282] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2238, 'y': -0.0057, 'tipo': 'limon', 'area': 74755, 'candidatas': [{'x': -0.3165, 'y': 0.0346}, {'x': -0.2238, 'y': -0.0057}, {'x': -0.1645, 'y': -0.0285}]}
+[INFO] [1793822255.934472255] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2366, 'y': 0.0081, 'tipo': 'limon', 'area': 96452, 'candidatas': [{'x': -0.3162, 'y': 0.0346}, {'x': -0.2366, 'y': 0.0081}, {'x': -0.1629, 'y': -0.007}]}
+[INFO] [1793822256.995789621] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.224, 'y': 0.0049, 'tipo': 'limon', 'area': 76142, 'candidatas': [{'x': -0.2993, 'y': 0.0534}, {'x': -0.224, 'y': 0.0049}]}
+[INFO] [1793822257.686424278] [mision_frutas]: brazo: {'orden': 'cerrar:limon', 'ok': True, 'texto': 'por_verificar'}
+[INFO] [1793822257.975682250] [mision_frutas]: --- VERIFICAR
+[INFO] [1793822258.055111041] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.224, 'y': 0.0048, 'tipo': 'limon', 'area': 76116, 'candidatas': [{'x': -0.2995, 'y': 0.0526}, {'x': -0.224, 'y': 0.0048}]}
+[INFO] [1793822259.118655524] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2236, 'y': 0.0023, 'tipo': 'limon', 'area': 76979, 'candidatas': [{'x': -0.2995, 'y': 0.0526}, {'x': -0.2236, 'y': 0.0023}]}
+[WARN] [1793822259.385738868] [mision_frutas]: cam_garra ve la fruta agarrada en x=-0.224 y=0.005 (11 cuadros; x_agarre=-0.23 y_agarre=0.0)
+[INFO] [1793822259.473598059] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822260.192842837] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2238, 'y': 0.0047, 'tipo': 'limon', 'area': 76166, 'candidatas': [{'x': -0.2994, 'y': 0.0525}, {'x': -0.2238, 'y': 0.0047}]}
+[INFO] [1793822261.264251690] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.22, 'y': 0.0043, 'tipo': 'limon', 'area': 78782, 'candidatas': [{'x': -0.2986, 'y': 0.0518}, {'x': -0.22, 'y': 0.0043}]}
+[INFO] [1793822262.326667817] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2179, 'y': 0.0033, 'tipo': 'limon', 'area': 80492, 'candidatas': [{'x': -0.2978, 'y': 0.0513}, {'x': -0.2179, 'y': 0.0033}]}
+[INFO] [1793822263.394757681] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2151, 'y': 0.0027, 'tipo': 'limon', 'area': 84855, 'candidatas': [{'x': -0.2964, 'y': 0.0503}, {'x': -0.1882, 'y': -0.0456}, {'x': -0.2151, 'y': 0.0027}]}
+[INFO] [1793822264.462289588] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2128, 'y': 0.0018, 'tipo': 'limon', 'area': 88592, 'candidatas': [{'x': -0.296, 'y': 0.0499}, {'x': -0.1443, 'y': 0.0185}, {'x': -0.2128, 'y': 0.0018}]}
+[INFO] [1793822265.531200153] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2078, 'y': 0.0055, 'tipo': 'limon', 'area': 93676, 'candidatas': [{'x': -0.3247, 'y': -0.0209}, {'x': -0.2949, 'y': 0.05}, {'x': -0.2078, 'y': 0.0055}, {'x': -0.1359, 'y': 0.0338}]}
+[INFO] [1793822266.597175149] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2059, 'y': 0.0059, 'tipo': 'limon', 'area': 95944, 'candidatas': [{'x': -0.324, 'y': -0.0224}, {'x': -0.2938, 'y': 0.0486}, {'x': -0.1459, 'y': 0.0479}, {'x': -0.2059, 'y': 0.0059}]}
+[INFO] [1793822267.667393467] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2051, 'y': 0.0057, 'tipo': 'limon', 'area': 97236, 'candidatas': [{'x': -0.324, 'y': -0.0212}, {'x': -0.2937, 'y': 0.0489}, {'x': -0.2051, 'y': 0.0057}]}
+[INFO] [1793822268.736091262] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2045, 'y': 0.0056, 'tipo': 'limon', 'area': 97890, 'candidatas': [{'x': -0.3229, 'y': -0.0217}, {'x': -0.2928, 'y': 0.0476}, {'x': -0.2045, 'y': 0.0056}]}
+[INFO] [1793822269.797380206] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2048, 'y': 0.0055, 'tipo': 'limon', 'area': 97244, 'candidatas': [{'x': -0.3229, 'y': -0.0216}, {'x': -0.2926, 'y': 0.0473}, {'x': -0.1542, 'y': -0.0379}, {'x': -0.2048, 'y': 0.0055}]}
+[INFO] [1793822270.867165126] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2051, 'y': 0.0055, 'tipo': 'limon', 'area': 96487, 'candidatas': [{'x': -0.322, 'y': -0.0215}, {'x': -0.3103, 'y': -0.0975}, {'x': -0.2921, 'y': 0.0471}, {'x': -0.2051, 'y': 0.0055}]}
+[INFO] [1793822271.946526346] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2164, 'y': 0.0107, 'tipo': 'limon', 'area': 110153, 'candidatas': [{'x': -0.321, 'y': -0.0216}, {'x': -0.3081, 'y': -0.0974}, {'x': -0.2164, 'y': 0.0107}]}
+[INFO] [1793822273.001023476] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2054, 'y': 0.0056, 'tipo': 'limon', 'area': 95991, 'candidatas': [{'x': -0.3214, 'y': -0.0216}, {'x': -0.3079, 'y': -0.0973}, {'x': -0.2915, 'y': 0.0461}, {'x': -0.2054, 'y': 0.0056}]}
+[INFO] [1793822274.076672876] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.216, 'y': 0.0103, 'tipo': 'limon', 'area': 108557, 'candidatas': [{'x': -0.3197, 'y': -0.0215}, {'x': -0.3034, 'y': -0.0972}, {'x': -0.216, 'y': 0.0103}]}
+[INFO] [1793822275.141604710] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2162, 'y': 0.0104, 'tipo': 'limon', 'area': 107964, 'candidatas': [{'x': -0.3203, 'y': -0.0216}, {'x': -0.3049, 'y': -0.0973}, {'x': -0.2162, 'y': 0.0104}]}
+[INFO] [1793822276.204143508] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2166, 'y': 0.0105, 'tipo': 'limon', 'area': 105428, 'candidatas': [{'x': -0.3191, 'y': -0.0214}, {'x': -0.3003, 'y': -0.097}, {'x': -0.1453, 'y': -0.0381}, {'x': -0.2166, 'y': 0.0105}]}
+[INFO] [1793822277.279443064] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2161, 'y': 0.0002, 'tipo': 'limon', 'area': 102941, 'candidatas': [{'x': -0.3178, 'y': -0.0216}, {'x': -0.2976, 'y': -0.0971}, {'x': -0.2161, 'y': 0.0002}, {'x': -0.1351, 'y': -0.0163}]}
+[INFO] [1793822278.348668408] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2157, 'y': -0.0001, 'tipo': 'limon', 'area': 102803, 'candidatas': [{'x': -0.3179, 'y': -0.0213}, {'x': -0.2966, 'y': -0.0968}, {'x': -0.2157, 'y': -0.0001}]}
+[INFO] [1793822279.407797015] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2147, 'y': 0.0041, 'tipo': 'limon', 'area': 101487, 'candidatas': [{'x': -0.3162, 'y': -0.0212}, {'x': -0.2926, 'y': -0.0967}, {'x': -0.2147, 'y': 0.0041}]}
+[INFO] [1793822280.484889470] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2132, 'y': 0.0015, 'tipo': 'limon', 'area': 102108, 'candidatas': [{'x': -0.3175, 'y': -0.0215}, {'x': -0.2946, 'y': -0.0968}, {'x': -0.2634, 'y': 0.0773}, {'x': -0.2132, 'y': 0.0015}, {'x': -0.1402, 'y': -0.0252}]}
+[INFO] [1793822281.038010738] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[WARN] [1793822281.276636730] [mision_frutas]: verificando fruta ARRIBA; ruedas quietas
+[INFO] [1793822281.547836589] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.212, 'y': 0.0015, 'tipo': 'limon', 'area': 101628, 'candidatas': [{'x': -0.3166, 'y': -0.0214}, {'x': -0.2898, 'y': -0.0967}, {'x': -0.212, 'y': 0.0015}]}
+[INFO] [1793822281.576479801] [mision_frutas]: --- PREGUNTAR_FINAL
+[INFO] [1793822281.685535744] [mision_frutas]: --- SALIR
+[INFO] [1793822286.072970150] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793822292.578245048] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793822300.976556104] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822301.273829815] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793822301.474609689] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793822318.775810091] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822321.776661331] [mision_frutas]: --- REACERCAR_CAJA
+[INFO] [1793822325.474371730] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822328.576556248] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793822328.774391781] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793822345.074616324] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822345.576461172] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793822345.774977483] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793822355.674081625] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822358.676289919] [mision_frutas]: --- REACERCAR_CAJA
+[INFO] [1793822368.875072697] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822369.276312653] [mision_frutas]: --- ACERCAR_CAJA
+[INFO] [1793822369.375202462] [mision_frutas]: --- GIRAR_CAJA
+[INFO] [1793822379.074608127] [mision_frutas]: --- ENTRAR_A_CAJA
+[INFO] [1793822379.576664237] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822379.978642952] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822397.474100748] [mision_frutas]: --- SOLTAR
+[INFO] [1793822397.979766714] [mision_frutas]: orden al brazo: soltar:400
+[INFO] [1793822399.502281314] [mision_frutas]: brazo: {'orden': 'soltar:400', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822399.674188316] [mision_frutas]: --- ALEJAR
+[INFO] [1793822403.975106880] [mision_frutas]: --- CERRAR_VACIO
+[INFO] [1793822404.574849162] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793822405.951219343] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793822406.072832732] [mision_frutas]: --- BAJAR_VACIO
+[INFO] [1793822406.575114025] [mision_frutas]: orden al brazo: bajar
+[INFO] [1793822428.201352539] [mision_frutas]: brazo: {'orden': 'bajar', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822428.475838688] [mision_frutas]: --- FIN
+[INFO] [1793822428.482486732] [mision_frutas]: FIN: ('fin', '1 frutas entregadas')
+[INFO] [1793822428.485887152] [mision_frutas]: historial: INICIO > RECONOCER > IR_A_ZONA > BUSCAR > ACERCAR > GIRAR > ABRIR > RETROCEDER > CERRAR > VERIFICAR > PREGUNTAR_FINAL > SALIR > BUSCAR_CAJA > IR_A_CANDIDATA > LEER_CAJA > BUSCAR_CAJA > IR_A_CANDIDATA > LEER_CAJA > REACERCAR_CAJA > LEER_CAJA > BUSCAR_CAJA > IR_A_CANDIDATA > LEER_CAJA > BUSCAR_CAJA > IR_A_CANDIDATA > LEER_CAJA > REACERCAR_CAJA > LEER_CAJA > ACERCAR_CAJA > GIRAR_CAJA > ENTRAR_A_CAJA > SOLTAR > ALEJAR > CERRAR_VACIO > BAJAR_VACIO > FIN
+[INFO] [1793822428.490464119] [mision_frutas]: fruta agarrada vista por cam_garra en x=-0.224 y=0.005 (configurado x_agarre=-0.23 y_agarre=0.0)
+[INFO] [1793822428.495415749] [mision_frutas]: calibración guardada en /home/wallens/.config/wallens/agarre.yaml: la próxima misión la usa
+[WARN] [1793822498.317427425] [mision_frutas]: New publisher discovered on topic 'mision/pedido', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY
+[INFO] [1793822498.974850079] [mision_frutas]: --- INICIO
+[WARN] [1793822498.978229573] [mision_frutas]: esperando: /battery_state, frutas/detecciones (detector_frutas con la cámara frutas)
+[WARN] [1793822499.478202417] [mision_frutas]: esperando: frutas/detecciones (detector_frutas con la cámara frutas)
+[INFO] [1793822502.576081167] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822505.086103416] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 2.0369, 'y': -0.5724, 'd': 0.0396, 'px': 20}]
+[INFO] [1793822507.618445140] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 3.35, 'y': -0.8413, 'd': 0.0466, 'px': 14}]
+[INFO] [1793822511.070398241] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 1.2873, 'y': -0.3565, 'd': 0.051, 'px': 42}]
+[INFO] [1793822513.822650974] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 1.8197, 'y': -0.5081, 'd': 0.0317, 'px': 18}]
+[INFO] [1793822515.239808105] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.2873, 'y': -0.3633, 'd': 0.0486, 'px': 40}]
+[INFO] [1793822517.511835744] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.2873, 'y': -0.3658, 'd': 0.0437, 'px': 36}]
+[INFO] [1793822520.477892794] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 2.5742, 'y': -0.7369, 'd': 0.0425, 'px': 16}]
+[INFO] [1793822521.823073783] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 1.9622, 'y': -0.5413, 'd': 0.0442, 'px': 23}]
+[INFO] [1793822524.103084510] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822524.175097882] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793822524.470986147] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793822524.674940665] [mision_frutas]: --- RECONOCER
+[INFO] [1793822525.107386765] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 3.6509, 'y': -0.9187, 'd': 0.0509, 'px': 14}]
+[INFO] [1793822533.698805557] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 3.2179, 'y': 0.0798, 'd': 0.0447, 'px': 14}]
+[INFO] [1793822534.976902082] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': -0.3209, 'd': 0.0882, 'px': 40}]
+[INFO] [1793822536.314205000] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.8592, 'y': -0.3625, 'd': 0.036, 'px': 20}]
+[INFO] [1793822545.038014955] [mision_frutas]: cam_frutas: [{'tipo': 'naranja', 'x': 1.6158, 'y': -0.4811, 'd': 0.0372, 'px': 24}]
+[INFO] [1793822560.914717578] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.8128, 'y': 0.1862, 'd': 0.0671, 'px': 92}]
+[INFO] [1793822561.973297259] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.9194, 'y': 0.1575, 'd': 0.0637, 'px': 76}, {'tipo': 'mandarina', 'x': 1.1146, 'y': -0.1108, 'd': 0.0831, 'px': 80}]
+[INFO] [1793822562.876288089] [mision_frutas]: --- IR_A_ZONA
+[INFO] [1793822563.044508165] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.0516, 'y': 0.068, 'd': 0.074, 'px': 76}, {'tipo': 'naranja', 'x': 1.2517, 'y': -0.2689, 'd': 0.0967, 'px': 82}]
+[INFO] [1793822564.044688302] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.8779, 'y': 0.1844, 'd': 0.0645, 'px': 81}, {'tipo': 'mandarina', 'x': 0.8624, 'y': 0.117, 'd': 0.0546, 'px': 70}, {'tipo': 'mandarina', 'x': 1.0758, 'y': 0.0695, 'd': 0.0799, 'px': 80}]
+[INFO] [1793822565.122965550] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7873, 'y': 0.1859, 'd': 0.0732, 'px': 104}, {'tipo': 'mandarina', 'x': 0.9657, 'y': 0.1432, 'd': 0.0744, 'px': 84}, {'tipo': 'limon', 'x': 1.306, 'y': -0.2151, 'd': 0.0741, 'px': 60}, {'tipo': 'naranja', 'x': 0.9657, 'y': 0.013, 'd': 0.0735, 'px': 83}]
+[INFO] [1793822565.775109413] [mision_frutas]: --- BUSCAR
+[INFO] [1793822566.130872374] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7693, 'y': 0.1864, 'd': 0.0617, 'px': 90}, {'tipo': 'mandarina', 'x': 0.956, 'y': 0.1511, 'd': 0.0754, 'px': 86}, {'tipo': 'limon', 'x': 1.2873, 'y': -0.2062, 'd': 0.0753, 'px': 62}, {'tipo': 'naranja', 'x': 0.9466, 'y': 0.02, 'd': 0.0728, 'px': 84}]
+[INFO] [1793822567.138295203] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7693, 'y': 0.1866, 'd': 0.0617, 'px': 90}, {'tipo': 'mandarina', 'x': 0.9657, 'y': 0.1529, 'd': 0.0762, 'px': 86}, {'tipo': 'limon', 'x': 1.2873, 'y': -0.2061, 'd': 0.0753, 'px': 62}, {'tipo': 'naranja', 'x': 0.9466, 'y': 0.0199, 'd': 0.0728, 'px': 84}]
+[INFO] [1793822567.482340914] [mision_frutas]: --- ACERCAR
+[INFO] [1793822568.210508793] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7578, 'y': 0.1807, 'd': 0.0646, 'px': 96}, {'tipo': 'mandarina', 'x': 0.9466, 'y': 0.141, 'd': 0.078, 'px': 90}, {'tipo': 'limon', 'x': 1.2873, 'y': -0.2289, 'd': 0.0778, 'px': 64}, {'tipo': 'naranja', 'x': 0.9373, 'y': 0.0082, 'd': 0.0754, 'px': 88}]
+[INFO] [1793822569.215523344] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.9857, 'y': 0.0722, 'd': 0.0834, 'px': 92}, {'tipo': 'limon', 'x': 1.3657, 'y': -0.3836, 'd': 0.07, 'px': 54}, {'tipo': 'naranja', 'x': 0.9466, 'y': -0.0742, 'd': 0.0849, 'px': 98}]
+[INFO] [1793822570.291917739] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.956, 'y': 0.0404, 'd': 0.0894, 'px': 102}, {'tipo': 'naranja', 'x': 0.8701, 'y': -0.1149, 'd': 0.0899, 'px': 114}]
+[INFO] [1793822571.359851604] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.8624, 'y': 0.0198, 'd': 0.0913, 'px': 117}, {'tipo': 'naranja', 'x': 0.7467, 'y': -0.1389, 'd': 0.0966, 'px': 146}]
+[INFO] [1793822572.447144534] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.5393, 'y': 0.1062, 'd': 0.0773, 'px': 172}, {'tipo': 'mandarina', 'x': 0.7998, 'y': 0.0226, 'd': 0.0946, 'px': 132}, {'tipo': 'naranja', 'x': 0.6534, 'y': -0.135, 'd': 0.0935, 'px': 165}]
+[INFO] [1793822572.975782875] [mision_frutas]: --- GIRAR
+[INFO] [1793822574.382614678] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822575.453692523] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822576.514080613] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822577.586287508] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822578.646732469] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822579.717467951] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3103, 'y': 0.0505, 'tipo': 'limon', 'area': 5056, 'candidatas': [{'x': -0.3103, 'y': 0.0505}]}
+[INFO] [1793822580.790642953] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2961, 'y': 0.0715, 'tipo': 'mandarina', 'area': 6116, 'candidatas': [{'x': -0.3281, 'y': -0.0899}, {'x': -0.3151, 'y': 0.0478}, {'x': -0.3163, 'y': -0.0535}, {'x': -0.2961, 'y': 0.0715}]}
+[INFO] [1793822581.853057589] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3092, 'y': -0.0319, 'tipo': '', 'area': 13735, 'candidatas': [{'x': -0.322, 'y': 0.0169}, {'x': -0.3018, 'y': 0.0774}, {'x': -0.3092, 'y': -0.0319}]}
+[INFO] [1793822582.674208351] [mision_frutas]: --- ABRIR
+[INFO] [1793822582.923665500] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3093, 'y': -0.0691, 'tipo': 'mandarina', 'area': 16271, 'candidatas': [{'x': -0.3238, 'y': -0.019}, {'x': -0.2992, 'y': 0.0578}, {'x': -0.3093, 'y': -0.0691}]}
+[INFO] [1793822583.176169609] [mision_frutas]: orden al brazo: bajar
+[INFO] [1793822583.991368285] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3106, 'y': -0.069, 'tipo': 'mandarina', 'area': 14931, 'candidatas': [{'x': -0.3244, 'y': -0.0183}, {'x': -0.3106, 'y': -0.069}, {'x': -0.3002, 'y': 0.0576}]}
+[INFO] [1793822585.058551575] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3095, 'y': -0.0691, 'tipo': 'mandarina', 'area': 16048, 'candidatas': [{'x': -0.3236, 'y': -0.0173}, {'x': -0.2991, 'y': 0.0579}, {'x': -0.3095, 'y': -0.0691}]}
+[INFO] [1793822586.125768199] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3115, 'y': -0.0688, 'tipo': 'mandarina', 'area': 14209, 'candidatas': [{'x': -0.3011, 'y': 0.0579}, {'x': -0.3115, 'y': -0.0688}]}
+[INFO] [1793822587.191595722] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.311, 'y': -0.0693, 'tipo': 'mandarina', 'area': 14741, 'candidatas': [{'x': -0.311, 'y': -0.0693}, {'x': -0.3003, 'y': 0.0578}]}
+[INFO] [1793822588.265201673] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3127, 'y': -0.0687, 'tipo': 'mandarina', 'area': 13219, 'candidatas': [{'x': -0.3127, 'y': -0.0687}, {'x': -0.3022, 'y': 0.0581}]}
+[INFO] [1793822589.332198079] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3033, 'y': 0.058, 'tipo': '', 'area': 12214, 'candidatas': [{'x': -0.3138, 'y': -0.0685}, {'x': -0.3033, 'y': 0.058}]}
+[INFO] [1793822590.397691775] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3028, 'y': 0.0583, 'tipo': '', 'area': 12442, 'candidatas': [{'x': -0.3028, 'y': 0.0583}, {'x': -0.3133, 'y': -0.0686}]}
+[INFO] [1793822591.468433712] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3047, 'y': 0.0585, 'tipo': '', 'area': 10941, 'candidatas': [{'x': -0.315, 'y': -0.0679}, {'x': -0.3047, 'y': 0.0585}]}
+[INFO] [1793822592.534074890] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3036, 'y': 0.0582, 'tipo': 'naranja', 'area': 11868, 'candidatas': [{'x': -0.3145, 'y': -0.0691}, {'x': -0.3036, 'y': 0.0582}]}
+[INFO] [1793822593.599581867] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3051, 'y': 0.0587, 'tipo': '', 'area': 10521, 'candidatas': [{'x': -0.3156, 'y': -0.0685}, {'x': -0.3051, 'y': 0.0587}]}
+[INFO] [1793822594.672249552] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3058, 'y': 0.0586, 'tipo': 'naranja', 'area': 10001, 'candidatas': [{'x': -0.316, 'y': -0.0681}, {'x': -0.3058, 'y': 0.0586}]}
+[INFO] [1793822595.746592579] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3056, 'y': 0.0586, 'tipo': '', 'area': 10147, 'candidatas': [{'x': -0.3158, 'y': -0.0684}, {'x': -0.3056, 'y': 0.0586}]}
+[INFO] [1793822596.800375752] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.307, 'y': 0.0587, 'tipo': 'naranja', 'area': 8997, 'candidatas': [{'x': -0.3171, 'y': -0.0677}, {'x': -0.307, 'y': 0.0587}]}
+[INFO] [1793822597.887801855] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3077, 'y': 0.0588, 'tipo': 'naranja', 'area': 8497, 'candidatas': [{'x': -0.3077, 'y': 0.0588}, {'x': -0.3172, 'y': -0.0683}]}
+[INFO] [1793822598.942749874] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3083, 'y': 0.0591, 'tipo': 'naranja', 'area': 7943, 'candidatas': [{'x': -0.3178, 'y': -0.0674}, {'x': -0.3083, 'y': 0.0591}]}
+[INFO] [1793822600.003005504] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3095, 'y': 0.0594, 'tipo': 'naranja', 'area': 6980, 'candidatas': [{'x': -0.3184, 'y': -0.067}, {'x': -0.3095, 'y': 0.0594}]}
+[INFO] [1793822601.076528005] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3101, 'y': 0.0594, 'tipo': '', 'area': 6487, 'candidatas': [{'x': -0.3191, 'y': -0.0669}, {'x': -0.3101, 'y': 0.0594}]}
+[INFO] [1793822602.141293846] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3108, 'y': 0.0597, 'tipo': '', 'area': 5805, 'candidatas': [{'x': -0.3199, 'y': -0.0669}, {'x': -0.3108, 'y': 0.0597}]}
+[INFO] [1793822603.208631670] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3116, 'y': 0.0598, 'tipo': '', 'area': 5168, 'candidatas': [{'x': -0.3116, 'y': 0.0598}, {'x': -0.3203, 'y': -0.0669}]}
+[INFO] [1793822604.282826242] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3123, 'y': 0.0603, 'tipo': '', 'area': 4554, 'candidatas': [{'x': -0.321, 'y': -0.067}, {'x': -0.3123, 'y': 0.0603}]}
+[INFO] [1793822604.689979943] [mision_frutas]: brazo: {'orden': 'bajar', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822604.873856988] [mision_frutas]: orden al brazo: abrir
+[INFO] [1793822605.346030801] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3129, 'y': 0.0603, 'tipo': '', 'area': 4146, 'candidatas': [{'x': -0.3129, 'y': 0.0603}, {'x': -0.3214, 'y': -0.0671}]}
+[INFO] [1793822606.413519590] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3122, 'y': 0.0601, 'tipo': '', 'area': 4643, 'candidatas': [{'x': -0.3122, 'y': 0.0601}, {'x': -0.3206, 'y': -0.0669}]}
+[INFO] [1793822606.788122504] [mision_frutas]: brazo: {'orden': 'abrir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822607.074876967] [mision_frutas]: --- RETROCEDER
+[INFO] [1793822607.487484685] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3198, 'y': -0.0704, 'tipo': '', 'area': 5155, 'candidatas': [{'x': -0.3122, 'y': 0.058}, {'x': -0.3198, 'y': -0.0704}]}
+[INFO] [1793822608.555817674] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3128, 'y': 0.0372, 'tipo': '', 'area': 5525, 'candidatas': [{'x': -0.3128, 'y': 0.0372}, {'x': -0.3189, 'y': -0.0891}]}
+[INFO] [1793822609.620037877] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3113, 'y': 0.0235, 'tipo': '', 'area': 7947, 'candidatas': [{'x': -0.3235, 'y': -0.097}, {'x': -0.3113, 'y': 0.0235}]}
+[INFO] [1793822610.682672834] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3078, 'y': 0.017, 'tipo': '', 'area': 12424, 'candidatas': [{'x': -0.3078, 'y': 0.017}]}
+[INFO] [1793822611.750597569] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.3032, 'y': 0.0161, 'tipo': '', 'area': 18708, 'candidatas': [{'x': -0.3286, 'y': -0.0795}, {'x': -0.3032, 'y': 0.0161}]}
+[INFO] [1793822612.819578834] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2965, 'y': 0.0104, 'tipo': '', 'area': 29053, 'candidatas': [{'x': -0.3252, 'y': -0.0837}, {'x': -0.2965, 'y': 0.0104}]}
+[INFO] [1793822613.888989412] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2887, 'y': 0.0059, 'tipo': '', 'area': 42890, 'candidatas': [{'x': -0.3219, 'y': -0.0871}, {'x': -0.2887, 'y': 0.0059}]}
+[INFO] [1793822614.957387776] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2791, 'y': 0.0048, 'tipo': 'mandarina', 'area': 61271, 'candidatas': [{'x': -0.3194, 'y': -0.0895}, {'x': -0.2791, 'y': 0.0048}]}
+[INFO] [1793822616.027530961] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2701, 'y': 0.0051, 'tipo': 'mandarina', 'area': 80770, 'candidatas': [{'x': -0.3179, 'y': -0.0913}, {'x': -0.2701, 'y': 0.0051}]}
+[INFO] [1793822617.095426812] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2597, 'y': 0.0057, 'tipo': 'mandarina', 'area': 104088, 'candidatas': [{'x': -0.3169, 'y': -0.0928}, {'x': -0.2597, 'y': 0.0057}]}
+[INFO] [1793822618.161569288] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2504, 'y': 0.0059, 'tipo': 'mandarina', 'area': 125429, 'candidatas': [{'x': -0.3173, 'y': -0.0941}, {'x': -0.2253, 'y': -0.0867}, {'x': -0.2504, 'y': 0.0059}]}
+[INFO] [1793822619.236190815] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2422, 'y': 0.0056, 'tipo': 'mandarina', 'area': 145596, 'candidatas': [{'x': -0.3185, 'y': -0.0952}, {'x': -0.2167, 'y': -0.0902}, {'x': -0.2422, 'y': 0.0056}]}
+[INFO] [1793822620.298640837] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2322, 'y': 0.006, 'tipo': 'mandarina', 'area': 170904, 'candidatas': [{'x': -0.3198, 'y': -0.0962}, {'x': -0.2105, 'y': -0.0897}, {'x': -0.2322, 'y': 0.006}]}
+[INFO] [1793822620.973857401] [mision_frutas]: --- CERRAR
+[INFO] [1793822621.368812212] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2253, 'y': 0.0059, 'tipo': 'mandarina', 'area': 190476, 'candidatas': [{'x': -0.3226, 'y': -0.0973}, {'x': -0.2013, 'y': -0.0891}, {'x': -0.2253, 'y': 0.0059}]}
+[INFO] [1793822621.574689882] [mision_frutas]: orden al brazo: cerrar:mandarina
+[INFO] [1793822622.439006200] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2254, 'y': 0.0059, 'tipo': 'mandarina', 'area': 190395, 'candidatas': [{'x': -0.2014, 'y': -0.0894}, {'x': -0.2254, 'y': 0.0059}]}
+[INFO] [1793822623.499586404] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2257, 'y': 0.006, 'tipo': 'mandarina', 'area': 190481, 'candidatas': [{'x': -0.3225, 'y': -0.0973}, {'x': -0.2033, 'y': -0.0886}, {'x': -0.1536, 'y': -0.0776}, {'x': -0.2257, 'y': 0.006}]}
+[INFO] [1793822624.581759753] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2402, 'y': 0.0049, 'tipo': 'mandarina', 'area': 163954, 'candidatas': [{'x': -0.2402, 'y': 0.0049}, {'x': -0.1379, 'y': -0.0041}]}
+[INFO] [1793822625.642273997] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2396, 'y': 0.0046, 'tipo': '', 'area': 166763, 'candidatas': [{'x': -0.1939, 'y': -0.0986}, {'x': -0.2087, 'y': -0.0896}, {'x': -0.2396, 'y': 0.0046}, {'x': -0.1377, 'y': -0.0056}]}
+[INFO] [1793822626.007929998] [mision_frutas]: brazo: {'orden': 'cerrar:mandarina', 'ok': True, 'texto': 'por_verificar'}
+[INFO] [1793822626.374092182] [mision_frutas]: --- VERIFICAR
+[INFO] [1793822626.707801280] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2396, 'y': 0.0046, 'tipo': '', 'area': 166191, 'candidatas': [{'x': -0.3236, 'y': -0.0972}, {'x': -0.2093, 'y': -0.0907}, {'x': -0.2396, 'y': 0.0046}, {'x': -0.1382, 'y': -0.0068}]}
+[WARN] [1793822627.778309492] [mision_frutas]: cam_garra ve la fruta agarrada en x=-0.240 y=0.005 (11 cuadros; x_agarre=-0.23 y_agarre=0.0)
+[INFO] [1793822627.784937908] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2398, 'y': 0.0045, 'tipo': '', 'area': 165873, 'candidatas': [{'x': -0.3235, 'y': -0.0972}, {'x': -0.2088, 'y': -0.0898}, {'x': -0.2398, 'y': 0.0045}, {'x': -0.1411, 'y': 0.0356}, {'x': -0.1384, 'y': -0.0075}]}
+[INFO] [1793822627.876672518] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822628.844901474] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.239, 'y': 0.0045, 'tipo': '', 'area': 166753, 'candidatas': [{'x': -0.2079, 'y': -0.0896}, {'x': -0.239, 'y': 0.0045}, {'x': -0.1376, 'y': -0.0061}]}
+[INFO] [1793822629.909216287] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2381, 'y': 0.004, 'tipo': '', 'area': 166210, 'candidatas': [{'x': -0.211, 'y': -0.0906}, {'x': -0.2381, 'y': 0.004}, {'x': -0.1369, 'y': -0.009}]}
+[INFO] [1793822630.983055941] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2372, 'y': 0.0038, 'tipo': '', 'area': 165264, 'candidatas': [{'x': -0.3232, 'y': -0.0972}, {'x': -0.207, 'y': -0.09}, {'x': -0.2372, 'y': 0.0038}, {'x': -0.1364, 'y': -0.0087}]}
+[INFO] [1793822632.047811531] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2355, 'y': 0.0034, 'tipo': '', 'area': 168746, 'candidatas': [{'x': -0.3191, 'y': -0.0971}, {'x': -0.2078, 'y': -0.09}, {'x': -0.2355, 'y': 0.0034}, {'x': -0.1322, 'y': 0.0392}]}
+[INFO] [1793822633.115476119] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2352, 'y': 0.0033, 'tipo': '', 'area': 168806, 'candidatas': [{'x': -0.3197, 'y': -0.097}, {'x': -0.2088, 'y': -0.0903}, {'x': -0.2352, 'y': 0.0033}]}
+[INFO] [1793822634.191444113] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2337, 'y': 0.003, 'tipo': '', 'area': 171633, 'candidatas': [{'x': -0.3172, 'y': -0.0968}, {'x': -0.2082, 'y': -0.0896}, {'x': -0.2337, 'y': 0.003}, {'x': -0.132, 'y': 0.0203}, {'x': -0.1368, 'y': 0.0371}]}
+[INFO] [1793822635.264729645] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2311, 'y': 0.0033, 'tipo': 'naranja', 'area': 176435, 'candidatas': [{'x': -0.3167, 'y': -0.097}, {'x': -0.2082, 'y': -0.0896}, {'x': -0.2311, 'y': 0.0033}]}
+[INFO] [1793822636.314492530] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2307, 'y': 0.0036, 'tipo': 'naranja', 'area': 177232, 'candidatas': [{'x': -0.3132, 'y': -0.0966}, {'x': -0.2087, 'y': -0.0908}, {'x': -0.2307, 'y': 0.0036}]}
+[INFO] [1793822637.388759242] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2308, 'y': 0.0036, 'tipo': '', 'area': 177367, 'candidatas': [{'x': -0.3096, 'y': -0.0966}, {'x': -0.2065, 'y': -0.0894}, {'x': -0.2308, 'y': 0.0036}]}
+[INFO] [1793822638.450746579] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2306, 'y': 0.0036, 'tipo': '', 'area': 177557, 'candidatas': [{'x': -0.31, 'y': -0.0966}, {'x': -0.2062, 'y': -0.0899}, {'x': -0.2306, 'y': 0.0036}]}
+[INFO] [1793822639.517466865] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2318, 'y': 0.0032, 'tipo': '', 'area': 174969, 'candidatas': [{'x': -0.3071, 'y': -0.0964}, {'x': -0.2076, 'y': -0.0895}, {'x': -0.2318, 'y': 0.0032}, {'x': -0.1329, 'y': 0.0374}]}
+[INFO] [1793822640.591719043] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2338, 'y': 0.0038, 'tipo': '', 'area': 171063, 'candidatas': [{'x': -0.3055, 'y': -0.0964}, {'x': -0.2056, 'y': -0.0898}, {'x': -0.1374, 'y': -0.0322}, {'x': -0.2338, 'y': 0.0038}]}
+[INFO] [1793822641.661545679] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2373, 'y': 0.0037, 'tipo': 'mandarina', 'area': 165136, 'candidatas': [{'x': -0.303, 'y': -0.0962}, {'x': -0.219, 'y': 0.0743}, {'x': -0.2065, 'y': -0.0906}, {'x': -0.2373, 'y': 0.0037}, {'x': -0.1369, 'y': -0.0321}, {'x': -0.1353, 'y': -0.0004}, {'x': -0.1345, 'y': 0.035}]}
+[INFO] [1793822642.726171945] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2376, 'y': 0.0036, 'tipo': 'mandarina', 'area': 164501, 'candidatas': [{'x': -0.2994, 'y': -0.096}, {'x': -0.2052, 'y': -0.0894}, {'x': -0.2376, 'y': 0.0036}]}
+[INFO] [1793822643.794718796] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2374, 'y': 0.0036, 'tipo': 'mandarina', 'area': 164650, 'candidatas': [{'x': -0.299, 'y': -0.096}, {'x': -0.2085, 'y': -0.0898}, {'x': -0.2374, 'y': 0.0036}]}
+[INFO] [1793822644.855524535] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2373, 'y': 0.0039, 'tipo': '', 'area': 165002, 'candidatas': [{'x': -0.2956, 'y': -0.096}, {'x': -0.2057, 'y': -0.0898}, {'x': -0.2373, 'y': 0.0039}]}
+[INFO] [1793822645.923648242] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2375, 'y': 0.0038, 'tipo': 'mandarina', 'area': 164645, 'candidatas': [{'x': -0.2945, 'y': -0.0961}, {'x': -0.2055, 'y': -0.0894}, {'x': -0.2375, 'y': 0.0038}]}
+[INFO] [1793822646.990422775] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2374, 'y': 0.0036, 'tipo': 'mandarina', 'area': 164533, 'candidatas': [{'x': -0.2918, 'y': -0.0958}, {'x': -0.2081, 'y': -0.0904}, {'x': -0.2374, 'y': 0.0036}]}
+[INFO] [1793822648.060165435] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2373, 'y': 0.0038, 'tipo': 'mandarina', 'area': 164262, 'candidatas': [{'x': -0.2883, 'y': -0.0957}, {'x': -0.2072, 'y': -0.0902}, {'x': -0.2373, 'y': 0.0038}]}
+[INFO] [1793822649.125781348] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2375, 'y': 0.0038, 'tipo': 'mandarina', 'area': 163719, 'candidatas': [{'x': -0.2877, 'y': -0.0957}, {'x': -0.2054, 'y': -0.0899}, {'x': -0.2375, 'y': 0.0038}]}
+[INFO] [1793822649.451563694] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[WARN] [1793822649.673402941] [mision_frutas]: verificando fruta ARRIBA; ruedas quietas
+[INFO] [1793822649.975170216] [mision_frutas]: --- PREGUNTAR_FINAL
+[INFO] [1793822650.073601891] [mision_frutas]: --- SALIR
+[INFO] [1793822654.474681426] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793822665.775485912] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793822676.374273367] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822676.873507589] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793822677.074839263] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793822684.075360749] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793822684.578143116] [mision_frutas]: --- ACERCAR_CAJA
+[INFO] [1793822689.274126374] [mision_frutas]: --- GIRAR_CAJA
+[INFO] [1793822698.975589614] [mision_frutas]: --- ENTRAR_A_CAJA
+[INFO] [1793822699.576567963] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822699.926812389] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822718.273060882] [mision_frutas]: --- SOLTAR
+[INFO] [1793822718.774830750] [mision_frutas]: orden al brazo: soltar:400
+[INFO] [1793822720.171855484] [mision_frutas]: brazo: {'orden': 'soltar:400', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822720.375273613] [mision_frutas]: --- ALEJAR
+[INFO] [1793822724.676664144] [mision_frutas]: --- CERRAR_VACIO
+[INFO] [1793822725.179731597] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793822726.387951124] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793822726.675533015] [mision_frutas]: --- BAJAR_VACIO
+[INFO] [1793822727.179069151] [mision_frutas]: orden al brazo: bajar
+[INFO] [1793822748.770524730] [mision_frutas]: brazo: {'orden': 'bajar', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822748.874423651] [mision_frutas]: --- FIN
+[INFO] [1793822748.879131933] [mision_frutas]: FIN: ('fin', '1 frutas entregadas')
+[INFO] [1793822748.882911407] [mision_frutas]: historial: INICIO > RECONOCER > IR_A_ZONA > BUSCAR > ACERCAR > GIRAR > ABRIR > RETROCEDER > CERRAR > VERIFICAR > PREGUNTAR_FINAL > SALIR > BUSCAR_CAJA > IR_A_CANDIDATA > LEER_CAJA > BUSCAR_CAJA > IR_A_CANDIDATA > LEER_CAJA > ACERCAR_CAJA > GIRAR_CAJA > ENTRAR_A_CAJA > SOLTAR > ALEJAR > CERRAR_VACIO > BAJAR_VACIO > FIN
+[INFO] [1793822748.887455338] [mision_frutas]: fruta agarrada vista por cam_garra en x=-0.240 y=0.005 (configurado x_agarre=-0.23 y_agarre=0.0)
+[INFO] [1793822748.894463770] [mision_frutas]: calibración guardada en /home/wallens/.config/wallens/agarre.yaml: la próxima misión la usa
+[WARN] [1793822915.705566524] [mision_frutas]: New publisher discovered on topic 'mision/pedido', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY
+[INFO] [1793822915.873724788] [mision_frutas]: --- INICIO
+[WARN] [1793822915.876348955] [mision_frutas]: esperando: brazo/estado (¿nodo del brazo y driver con brazo:=true?), /battery_state, frutas/detecciones (detector_frutas con la cámara frutas)
+[WARN] [1793822915.974872682] [mision_frutas]: esperando: /battery_state, frutas/detecciones (detector_frutas con la cámara frutas)
+[WARN] [1793822916.280583589] [mision_frutas]: esperando: frutas/detecciones (detector_frutas con la cámara frutas)
+[INFO] [1793822919.375954398] [mision_frutas]: orden al brazo: subir
+[INFO] [1793822941.130895301] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793822941.176072175] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793822941.495258696] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793822941.674751792] [mision_frutas]: --- RECONOCER
+[INFO] [1793822950.651253433] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 1.4795, 'y': 0.3731, 'd': 0.0847, 'px': 60}]
+[INFO] [1793822951.662141837] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7873, 'y': 0.2037, 'd': 0.0464, 'px': 66}, {'tipo': 'mandarina', 'x': 0.9756, 'y': 0.1635, 'd': 0.0735, 'px': 82}, {'tipo': 'mandarina', 'x': 0.9857, 'y': 0.0543, 'd': 0.0798, 'px': 88}]
+[INFO] [1793822952.473808689] [mision_frutas]: --- IR_A_ZONA
+[INFO] [1793822952.740743442] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 1.0758, 'y': 0.0823, 'd': 0.0779, 'px': 78}, {'tipo': 'naranja', 'x': 1.0758, 'y': -0.0385, 'd': 0.0819, 'px': 82}]
+[INFO] [1793822953.747373024] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 1.0066, 'y': 0.106, 'd': 0.0798, 'px': 86}, {'tipo': 'naranja', 'x': 0.9857, 'y': -0.015, 'd': 0.0852, 'px': 94}]
+[INFO] [1793822954.752601099] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.6918, 'y': 0.1772, 'd': 0.0388, 'px': 64}, {'tipo': 'mandarina', 'x': 0.9108, 'y': 0.131, 'd': 0.0797, 'px': 96}, {'tipo': 'naranja', 'x': 0.8624, 'y': 0.0107, 'd': 0.0835, 'px': 107}]
+[INFO] [1793822955.821664085] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.8476, 'y': 0.1462, 'd': 0.0796, 'px': 104}, {'tipo': 'naranja', 'x': 0.8128, 'y': 0.0285, 'd': 0.0854, 'px': 117}]
+[INFO] [1793822956.375483492] [mision_frutas]: --- BUSCAR
+[INFO] [1793822956.827405657] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.8128, 'y': 0.1461, 'd': 0.0788, 'px': 108}, {'tipo': 'naranja', 'x': 0.7578, 'y': 0.03, 'd': 0.0821, 'px': 122}]
+[INFO] [1793822957.839622999] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7998, 'y': 0.1435, 'd': 0.0759, 'px': 106}, {'tipo': 'naranja', 'x': 0.7578, 'y': 0.03, 'd': 0.0821, 'px': 122}, {'tipo': 'limon', 'x': 1.0859, 'y': -0.2139, 'd': 0.0549, 'px': 54}]
+[INFO] [1793822958.090438475] [mision_frutas]: --- ACERCAR
+[INFO] [1793822958.912232592] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7998, 'y': 0.1392, 'd': 0.0788, 'px': 110}, {'tipo': 'naranja', 'x': 0.7413, 'y': 0.0232, 'd': 0.0827, 'px': 126}]
+[INFO] [1793822959.994403824] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.7873, 'y': 0.1431, 'd': 0.0816, 'px': 116}, {'tipo': 'naranja', 'x': 0.7256, 'y': 0.0244, 'd': 0.0845, 'px': 132}]
+[INFO] [1793822961.064828748] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.7998, 'y': 0.2219, 'd': 0.0186, 'px': 26}, {'tipo': 'limon', 'x': 0.8263, 'y': 0.0482, 'd': 0.0729, 'px': 98}]
+[INFO] [1793822972.207215852] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.7459, 'y': 0.1515, 'd': 0.0438, 'px': 26}]
+[INFO] [1793822973.413145608] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.6782, 'y': 0.1503, 'd': 0.0452, 'px': 28}]
+[INFO] [1793822974.422400311] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.7113, 'y': 0.1502, 'd': 0.0478, 'px': 29}]
+[INFO] [1793822975.434558828] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 2.6912, 'y': -0.539, 'd': 0.0769, 'px': 29}]
+[INFO] [1793822977.378561007] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 0.5867, 'y': 0.1407, 'd': 0.0428, 'px': 86}]
+[INFO] [1793822978.378966032] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.5929, 'y': 0.0834, 'd': 0.0525, 'px': 104}, {'tipo': 'mandarina', 'x': 0.7308, 'y': -0.0482, 'd': 0.0788, 'px': 122}]
+[INFO] [1793822979.462411134] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.6964, 'y': -0.1078, 'd': 0.0635, 'px': 104}]
+[INFO] [1793822980.524047886] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.6873, 'y': -0.1706, 'd': 0.0517, 'px': 86}]
+[INFO] [1793822981.610733485] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.894, 'y': -0.2461, 'd': 0.0341, 'px': 42}]
+[INFO] [1793822982.685038059] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 0.736, 'y': 0.1994, 'd': 0.0208, 'px': 32}]
+[INFO] [1793822984.574699340] [mision_frutas]: --- GIRAR
+[INFO] [1793822985.888222363] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2158, 'y': -0.0955, 'tipo': 'naranja', 'area': 183, 'candidatas': [{'x': -0.2158, 'y': -0.0955}]}
+[INFO] [1793822986.958055173] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2137, 'y': -0.0969, 'tipo': '', 'area': 207, 'candidatas': [{'x': -0.2137, 'y': -0.0969}]}
+[INFO] [1793822988.025436629] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822989.105834386] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822990.176449229] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822991.226996933] [mision_frutas]: cam_garra: {'visible': False, 'x': 0, 'y': 0, 'tipo': '', 'area': 0, 'candidatas': []}
+[INFO] [1793822992.293568101] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.301, 'y': 0.0676, 'tipo': 'naranja', 'area': 7922, 'candidatas': [{'x': -0.301, 'y': 0.0676}]}
+[INFO] [1793822993.367342868] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2775, 'y': 0.048, 'tipo': 'mandarina', 'area': 31324, 'candidatas': [{'x': -0.3202, 'y': 0.0012}, {'x': -0.3103, 'y': -0.0336}, {'x': -0.2775, 'y': 0.048}]}
+[INFO] [1793822994.274250356] [mision_frutas]: --- ABRIR
+[INFO] [1793822994.438841410] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2836, 'y': -0.0118, 'tipo': 'naranja', 'area': 15717, 'candidatas': [{'x': -0.3218, 'y': -0.036}, {'x': -0.3073, 'y': 0.0383}, {'x': -0.3101, 'y': -0.0734}, {'x': -0.2836, 'y': -0.0118}, {'x': -0.209, 'y': -0.0077}]}
+[INFO] [1793822994.777552119] [mision_frutas]: orden al brazo: bajar
+[INFO] [1793822995.510687765] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2846, 'y': -0.0122, 'tipo': 'naranja', 'area': 17314, 'candidatas': [{'x': -0.3228, 'y': -0.0363}, {'x': -0.3082, 'y': 0.0382}, {'x': -0.3116, 'y': -0.0738}, {'x': -0.2846, 'y': -0.0122}]}
+[INFO] [1793822996.569854486] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2843, 'y': -0.0122, 'tipo': 'naranja', 'area': 16861, 'candidatas': [{'x': -0.3217, 'y': -0.0361}, {'x': -0.3074, 'y': 0.0382}, {'x': -0.3104, 'y': -0.0738}, {'x': -0.2843, 'y': -0.0122}]}
+[INFO] [1793822997.638057700] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2864, 'y': -0.012, 'tipo': 'naranja', 'area': 19937, 'candidatas': [{'x': -0.323, 'y': -0.0363}, {'x': -0.3089, 'y': 0.0385}, {'x': -0.3125, 'y': -0.074}, {'x': -0.2864, 'y': -0.012}]}
+[INFO] [1793822998.715743017] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2866, 'y': -0.0126, 'tipo': 'naranja', 'area': 20428, 'candidatas': [{'x': -0.3228, 'y': -0.0366}, {'x': -0.3084, 'y': 0.038}, {'x': -0.3125, 'y': -0.0745}, {'x': -0.2866, 'y': -0.0126}]}
+[INFO] [1793822999.782651593] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2886, 'y': -0.0117, 'tipo': 'naranja', 'area': 23298, 'candidatas': [{'x': -0.3238, 'y': -0.0365}, {'x': -0.3098, 'y': 0.0386}, {'x': -0.3138, 'y': -0.0742}, {'x': -0.2886, 'y': -0.0117}]}
+[INFO] [1793823000.849377301] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2904, 'y': -0.0122, 'tipo': 'naranja', 'area': 25882, 'candidatas': [{'x': -0.3249, 'y': -0.0369}, {'x': -0.3109, 'y': 0.0387}, {'x': -0.3154, 'y': -0.0748}, {'x': -0.2904, 'y': -0.0122}]}
+[INFO] [1793823001.913448564] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2905, 'y': -0.0118, 'tipo': 'naranja', 'area': 26210, 'candidatas': [{'x': -0.324, 'y': -0.0366}, {'x': -0.3104, 'y': 0.0386}, {'x': -0.3145, 'y': -0.0746}, {'x': -0.2905, 'y': -0.0118}]}
+[INFO] [1793823002.988089810] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2927, 'y': -0.0115, 'tipo': 'naranja', 'area': 29487, 'candidatas': [{'x': -0.3256, 'y': -0.0369}, {'x': -0.312, 'y': 0.039}, {'x': -0.3162, 'y': -0.0747}, {'x': -0.2927, 'y': -0.0115}, {'x': -0.2264, 'y': -0.0079}]}
+[INFO] [1793823004.054254560] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2933, 'y': -0.013, 'tipo': 'naranja', 'area': 30131, 'candidatas': [{'x': -0.3111, 'y': 0.0384}, {'x': -0.3162, 'y': -0.0755}, {'x': -0.2933, 'y': -0.013}, {'x': -0.228, 'y': -0.0079}]}
+[INFO] [1793823005.114659424] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2937, 'y': -0.012, 'tipo': 'naranja', 'area': 31411, 'candidatas': [{'x': -0.3125, 'y': 0.039}, {'x': -0.317, 'y': -0.0752}, {'x': -0.2937, 'y': -0.012}]}
+[INFO] [1793823006.183837154] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2942, 'y': -0.012, 'tipo': 'naranja', 'area': 32574, 'candidatas': [{'x': -0.3132, 'y': 0.039}, {'x': -0.3179, 'y': -0.0754}, {'x': -0.2942, 'y': -0.012}]}
+[INFO] [1793823007.256955672] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2974, 'y': -0.0038, 'tipo': 'naranja', 'area': 39467, 'candidatas': [{'x': -0.3177, 'y': -0.0756}, {'x': -0.2974, 'y': -0.0038}, {'x': -0.2431, 'y': -0.0104}]}
+[INFO] [1793823008.314969831] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2976, 'y': -0.0051, 'tipo': 'naranja', 'area': 39721, 'candidatas': [{'x': -0.3192, 'y': -0.0757}, {'x': -0.2976, 'y': -0.0051}, {'x': -0.2423, 'y': -0.0104}]}
+[INFO] [1793823009.390119521] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2977, 'y': -0.0055, 'tipo': 'naranja', 'area': 39796, 'candidatas': [{'x': -0.3194, 'y': -0.0758}, {'x': -0.2977, 'y': -0.0055}, {'x': -0.2439, 'y': -0.0103}]}
+[INFO] [1793823010.451193586] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2978, 'y': -0.0058, 'tipo': 'naranja', 'area': 39827, 'candidatas': [{'x': -0.3198, 'y': -0.0758}, {'x': -0.2978, 'y': -0.0058}, {'x': -0.2447, 'y': -0.0103}]}
+[INFO] [1793823011.517371302] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2979, 'y': -0.0064, 'tipo': 'naranja', 'area': 39563, 'candidatas': [{'x': -0.3202, 'y': -0.0756}, {'x': -0.2979, 'y': -0.0064}, {'x': -0.2447, 'y': -0.0103}]}
+[INFO] [1793823012.592563216] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2979, 'y': -0.0077, 'tipo': 'naranja', 'area': 39103, 'candidatas': [{'x': -0.3216, 'y': -0.0759}, {'x': -0.2979, 'y': -0.0077}, {'x': -0.2458, 'y': -0.0086}, {'x': -0.1841, 'y': -0.0215}]}
+[INFO] [1793823013.650932708] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.298, 'y': -0.0084, 'tipo': 'naranja', 'area': 38605, 'candidatas': [{'x': -0.3225, 'y': -0.0759}, {'x': -0.298, 'y': -0.0084}, {'x': -0.2466, 'y': -0.0081}]}
+[INFO] [1793823014.719367946] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2981, 'y': -0.0089, 'tipo': 'naranja', 'area': 38152, 'candidatas': [{'x': -0.3225, 'y': -0.076}, {'x': -0.2981, 'y': -0.0089}, {'x': -0.2519, 'y': -0.0102}]}
+[INFO] [1793823015.788847178] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2981, 'y': -0.0092, 'tipo': 'naranja', 'area': 37498, 'candidatas': [{'x': -0.3233, 'y': -0.0758}, {'x': -0.2981, 'y': -0.0092}]}
+[INFO] [1793823016.417806582] [mision_frutas]: brazo: {'orden': 'bajar', 'ok': True, 'texto': 'listo'}
+[INFO] [1793823016.776484472] [mision_frutas]: orden al brazo: abrir
+[INFO] [1793823016.853874367] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2986, 'y': -0.0093, 'tipo': 'naranja', 'area': 36809, 'candidatas': [{'x': -0.3234, 'y': -0.0758}, {'x': -0.2986, 'y': -0.0093}]}
+[INFO] [1793823017.932102447] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2897, 'y': -0.0094, 'tipo': 'naranja', 'area': 47807, 'candidatas': [{'x': -0.3234, 'y': -0.0759}, {'x': -0.2897, 'y': -0.0094}]}
+[INFO] [1793823018.723594180] [mision_frutas]: brazo: {'orden': 'abrir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793823018.975969930] [mision_frutas]: --- RETROCEDER
+[INFO] [1793823018.994623524] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.288, 'y': -0.0094, 'tipo': 'naranja', 'area': 50203, 'candidatas': [{'x': -0.3235, 'y': -0.076}, {'x': -0.288, 'y': -0.0094}]}
+[INFO] [1793823020.058758294] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2802, 'y': -0.0068, 'tipo': '', 'area': 68388, 'candidatas': [{'x': -0.3212, 'y': -0.0782}, {'x': -0.2802, 'y': -0.0068}]}
+[INFO] [1793823021.130084348] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2697, 'y': -0.0043, 'tipo': '', 'area': 95066, 'candidatas': [{'x': -0.318, 'y': -0.0805}, {'x': -0.2697, 'y': -0.0043}]}
+[INFO] [1793823022.199430695] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2589, 'y': -0.0051, 'tipo': '', 'area': 123842, 'candidatas': [{'x': -0.3149, 'y': -0.083}, {'x': -0.2589, 'y': -0.0051}]}
+[INFO] [1793823023.267586902] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2515, 'y': -0.006, 'tipo': 'mandarina', 'area': 146948, 'candidatas': [{'x': -0.3133, 'y': -0.0848}, {'x': -0.1549, 'y': -0.0423}, {'x': -0.2515, 'y': -0.006}]}
+[INFO] [1793823024.338493960] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.241, 'y': -0.0052, 'tipo': 'mandarina', 'area': 173042, 'candidatas': [{'x': -0.312, 'y': -0.085}, {'x': -0.241, 'y': -0.0052}]}
+[INFO] [1793823025.399269996] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2331, 'y': -0.006, 'tipo': 'mandarina', 'area': 198094, 'candidatas': [{'x': -0.3104, 'y': -0.0861}, {'x': -0.2331, 'y': -0.006}]}
+[INFO] [1793823026.273900384] [mision_frutas]: --- CERRAR
+[INFO] [1793823026.469690189] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2264, 'y': -0.0062, 'tipo': 'mandarina', 'area': 217467, 'candidatas': [{'x': -0.3083, 'y': -0.087}, {'x': -0.2264, 'y': -0.0062}]}
+[INFO] [1793823026.777241949] [mision_frutas]: orden al brazo: cerrar:naranja
+[INFO] [1793823027.542694957] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2264, 'y': -0.0063, 'tipo': 'mandarina', 'area': 216544, 'candidatas': [{'x': -0.3088, 'y': -0.0869}, {'x': -0.2264, 'y': -0.0063}]}
+[INFO] [1793823028.607288560] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2268, 'y': -0.0066, 'tipo': '', 'area': 216722, 'candidatas': [{'x': -0.3089, 'y': -0.0869}, {'x': -0.2268, 'y': -0.0066}]}
+[INFO] [1793823029.688579624] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.244, 'y': 0.005, 'tipo': 'mandarina', 'area': 174415, 'candidatas': [{'x': -0.3096, 'y': -0.087}, {'x': -0.244, 'y': 0.005}, {'x': -0.1357, 'y': 0.0051}]}
+[INFO] [1793823030.716129594] [mision_frutas]: brazo: {'orden': 'cerrar:naranja', 'ok': True, 'texto': 'por_verificar'}
+[INFO] [1793823030.742450506] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2434, 'y': 0.0048, 'tipo': '', 'area': 176842, 'candidatas': [{'x': -0.3094, 'y': -0.0869}, {'x': -0.2434, 'y': 0.0048}, {'x': -0.1386, 'y': -0.0282}, {'x': -0.1374, 'y': 0.0082}]}
+[INFO] [1793823030.873612347] [mision_frutas]: --- VERIFICAR
+[INFO] [1793823031.811878411] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2437, 'y': 0.0048, 'tipo': '', 'area': 175645, 'candidatas': [{'x': -0.3093, 'y': -0.087}, {'x': -0.2437, 'y': 0.0048}, {'x': -0.1424, 'y': 0.0159}, {'x': -0.1362, 'y': 0.0058}]}
+[WARN] [1793823032.374401367] [mision_frutas]: cam_garra ve la fruta agarrada en x=-0.244 y=0.005 (12 cuadros; x_agarre=-0.23 y_agarre=0.0)
+[INFO] [1793823032.473881833] [mision_frutas]: orden al brazo: subir
+[INFO] [1793823032.884265444] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2435, 'y': 0.0049, 'tipo': '', 'area': 176034, 'candidatas': [{'x': -0.3093, 'y': -0.087}, {'x': -0.2121, 'y': -0.0898}, {'x': -0.1362, 'y': 0.0132}, {'x': -0.2435, 'y': 0.0049}]}
+[INFO] [1793823033.949671674] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2414, 'y': 0.0067, 'tipo': '', 'area': 176439, 'candidatas': [{'x': -0.3093, 'y': -0.0871}, {'x': -0.2111, 'y': -0.0901}, {'x': -0.2414, 'y': 0.0067}, {'x': -0.1356, 'y': 0.0169}]}
+[INFO] [1793823035.013077122] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2408, 'y': 0.0068, 'tipo': '', 'area': 174715, 'candidatas': [{'x': -0.3248, 'y': -0.0406}, {'x': -0.3095, 'y': -0.0871}, {'x': -0.2044, 'y': -0.0973}, {'x': -0.1519, 'y': -0.0335}, {'x': -0.1342, 'y': 0.0184}, {'x': -0.2408, 'y': 0.0068}]}
+[INFO] [1793823036.089597684] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2407, 'y': 0.0064, 'tipo': '', 'area': 177843, 'candidatas': [{'x': -0.308, 'y': -0.0867}, {'x': -0.2097, 'y': -0.0906}, {'x': -0.2407, 'y': 0.0064}, {'x': -0.1369, 'y': -0.0271}, {'x': -0.1353, 'y': 0.0138}]}
+[INFO] [1793823037.146044606] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2409, 'y': 0.0065, 'tipo': '', 'area': 177993, 'candidatas': [{'x': -0.3079, 'y': -0.0869}, {'x': -0.2064, 'y': -0.0905}, {'x': -0.1786, 'y': -0.0825}, {'x': -0.1364, 'y': 0.0264}, {'x': -0.2409, 'y': 0.0065}, {'x': -0.1361, 'y': -0.0273}, {'x': -0.1349, 'y': 0.0122}]}
+[INFO] [1793823038.215776438] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2388, 'y': 0.0062, 'tipo': '', 'area': 183015, 'candidatas': [{'x': -0.3067, 'y': -0.0865}, {'x': -0.2055, 'y': -0.0902}, {'x': -0.2388, 'y': 0.0062}]}
+[INFO] [1793823039.289454020] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2372, 'y': 0.006, 'tipo': 'naranja', 'area': 187672, 'candidatas': [{'x': -0.3047, 'y': -0.0864}, {'x': -0.2067, 'y': -0.0911}, {'x': -0.2372, 'y': 0.006}]}
+[INFO] [1793823040.354895641] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2363, 'y': 0.0061, 'tipo': 'naranja', 'area': 188323, 'candidatas': [{'x': -0.3054, 'y': -0.0865}, {'x': -0.2363, 'y': 0.0061}]}
+[INFO] [1793823041.422363934] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2372, 'y': 0.0057, 'tipo': 'naranja', 'area': 188929, 'candidatas': [{'x': -0.303, 'y': -0.0864}, {'x': -0.2139, 'y': -0.0914}, {'x': -0.1929, 'y': -0.0838}, {'x': -0.2372, 'y': 0.0057}]}
+[INFO] [1793823042.488206738] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.239, 'y': 0.0061, 'tipo': '', 'area': 186301, 'candidatas': [{'x': -0.302, 'y': -0.0864}, {'x': -0.211, 'y': -0.0897}, {'x': -0.239, 'y': 0.0061}]}
+[INFO] [1793823043.555264775] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2399, 'y': 0.0064, 'tipo': '', 'area': 184405, 'candidatas': [{'x': -0.3011, 'y': -0.0862}, {'x': -0.21, 'y': -0.0905}, {'x': -0.1432, 'y': -0.0328}, {'x': -0.2399, 'y': 0.0064}]}
+[INFO] [1793823044.626033491] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2414, 'y': 0.0062, 'tipo': '', 'area': 183347, 'candidatas': [{'x': -0.2986, 'y': -0.0862}, {'x': -0.2099, 'y': -0.0908}, {'x': -0.2414, 'y': 0.0062}]}
+[INFO] [1793823045.696925373] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2422, 'y': 0.0064, 'tipo': 'mandarina', 'area': 181474, 'candidatas': [{'x': -0.2995, 'y': -0.0862}, {'x': -0.208, 'y': -0.0899}, {'x': -0.2422, 'y': 0.0064}, {'x': -0.1352, 'y': -0.0052}]}
+[INFO] [1793823046.756571221] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2429, 'y': 0.0067, 'tipo': 'mandarina', 'area': 181438, 'candidatas': [{'x': -0.2965, 'y': -0.0861}, {'x': -0.2092, 'y': -0.0902}, {'x': -0.2429, 'y': 0.0067}]}
+[INFO] [1793823047.823381761] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2436, 'y': 0.0066, 'tipo': 'mandarina', 'area': 180945, 'candidatas': [{'x': -0.2949, 'y': -0.0863}, {'x': -0.2148, 'y': -0.0906}, {'x': -0.1916, 'y': -0.0829}, {'x': -0.2436, 'y': 0.0066}]}
+[INFO] [1793823048.899920143] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2438, 'y': 0.0066, 'tipo': 'mandarina', 'area': 180540, 'candidatas': [{'x': -0.2932, 'y': -0.086}, {'x': -0.2438, 'y': 0.0066}, {'x': -0.1468, 'y': -0.0344}]}
+[INFO] [1793823049.968940206] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2441, 'y': 0.0065, 'tipo': 'mandarina', 'area': 180890, 'candidatas': [{'x': -0.2895, 'y': -0.0859}, {'x': -0.2133, 'y': -0.0902}, {'x': -0.2441, 'y': 0.0065}]}
+[INFO] [1793823051.031775015] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2441, 'y': 0.0068, 'tipo': 'mandarina', 'area': 180765, 'candidatas': [{'x': -0.2892, 'y': -0.0857}, {'x': -0.2114, 'y': -0.0907}, {'x': -0.2441, 'y': 0.0068}]}
+[INFO] [1793823052.098131968] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2442, 'y': 0.0067, 'tipo': 'mandarina', 'area': 181374, 'candidatas': [{'x': -0.2852, 'y': -0.0857}, {'x': -0.2136, 'y': -0.0906}, {'x': -0.1986, 'y': -0.0859}, {'x': -0.2442, 'y': 0.0067}]}
+[INFO] [1793823053.167116384] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2443, 'y': 0.007, 'tipo': 'mandarina', 'area': 181309, 'candidatas': [{'x': -0.2856, 'y': -0.0861}, {'x': -0.2299, 'y': -0.0655}, {'x': -0.2069, 'y': -0.0896}, {'x': -0.2443, 'y': 0.007}]}
+[INFO] [1793823054.071443188] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793823054.242053371] [mision_frutas]: cam_garra: {'visible': True, 'x': -0.2444, 'y': 0.0069, 'tipo': 'mandarina', 'area': 181068, 'candidatas': [{'x': -0.2836, 'y': -0.0856}, {'x': -0.2444, 'y': 0.0069}]}
+[WARN] [1793823054.275691734] [mision_frutas]: verificando fruta ARRIBA; ruedas quietas
+[INFO] [1793823054.577569517] [mision_frutas]: --- PREGUNTAR_FINAL
+[INFO] [1793823054.674197615] [mision_frutas]: --- SALIR
+[INFO] [1793823059.074151585] [mision_frutas]: --- BUSCAR_CAJA
+[INFO] [1793823065.675829226] [mision_frutas]: --- IR_A_CANDIDATA
+[INFO] [1793823082.675177026] [mision_frutas]: --- LEER_CAJA
+[INFO] [1793823083.075095419] [mision_frutas]: --- ACERCAR_CAJA
+[INFO] [1793823087.673990571] [mision_frutas]: --- GIRAR_CAJA
+[INFO] [1793823097.375397342] [mision_frutas]: --- ENTRAR_A_CAJA
+[INFO] [1793823097.875516682] [mision_frutas]: orden al brazo: subir
+[INFO] [1793823098.300925607] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793823117.273988291] [mision_frutas]: --- SOLTAR
+[INFO] [1793823117.775270515] [mision_frutas]: orden al brazo: soltar:400
+[INFO] [1793823119.384032213] [mision_frutas]: brazo: {'orden': 'soltar:400', 'ok': True, 'texto': 'listo'}
+[INFO] [1793823119.675448130] [mision_frutas]: --- ALEJAR
+[INFO] [1793823123.975522153] [mision_frutas]: --- CERRAR_VACIO
+[INFO] [1793823124.575345187] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793823125.769230739] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793823125.975703811] [mision_frutas]: --- BAJAR_VACIO
+[INFO] [1793823126.473817558] [mision_frutas]: orden al brazo: bajar

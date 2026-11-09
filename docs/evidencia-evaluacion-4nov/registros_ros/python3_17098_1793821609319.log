@@ -1,0 +1,66 @@
+[INFO] [1793821610.621855152] [mision_frutas]: misión: Pedido(zona=(1.0, 0.0), radio=0.1, frutas=['limon'], entrega=(0.0, 0.0), angulo_linea=0.0, separacion=0.25, volver_home=False) desde=None hasta=None x_agarre=-0.23 y_agarre=0.0
+[INFO] [1793821791.295076952] [mision_frutas]: --- INICIO
+[WARN] [1793821791.298280053] [mision_frutas]: esperando: frutas/detecciones (detector_frutas con la cámara frutas)
+[WARN] [1793821793.093284971] [mision_frutas]: calibrando el tornillo; ruedas quietas (máximo 90 s)
+[INFO] [1793821793.098047726] [mision_frutas]: orden al brazo: calibrar
+[INFO] [1793821798.240509369] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6203, 'd': 0.097, 'px': 44}]
+[INFO] [1793821799.241448770] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6187, 'd': 0.097, 'px': 44}]
+[INFO] [1793821800.247010561] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6176, 'd': 0.0926, 'px': 42}]
+[INFO] [1793821801.854821552] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.635, 'd': 0.0976, 'px': 43}]
+[INFO] [1793821803.465054421] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.6372, 'd': 0.0976, 'px': 43}]
+[INFO] [1793821805.080882937] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6192, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821806.293812127] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.621, 'd': 0.097, 'px': 44}]
+[INFO] [1793821808.584164966] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6202, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821811.548948731] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6175, 'd': 0.0992, 'px': 45}]
+[INFO] [1793821812.799530403] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6177, 'd': 0.0948, 'px': 43}]
+[WARN] [1793821813.710071279] [mision_frutas]: New publisher discovered on topic 'mision/pedido', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY
+[INFO] [1793821815.433894774] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.6375, 'd': 0.1021, 'px': 45}]
+[INFO] [1793821816.767567002] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.6362, 'd': 0.0953, 'px': 42}]
+[INFO] [1793821819.269560378] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.618, 'd': 0.097, 'px': 44}]
+[INFO] [1793821822.432627995] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6188, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821825.489384144] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6201, 'd': 0.097, 'px': 44}]
+[INFO] [1793821827.172490589] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6179, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821828.841788813] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6171, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821829.858622828] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6194, 'd': 0.0926, 'px': 42}]
+[INFO] [1793821831.199485513] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.618, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821832.403594923] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6173, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821833.745275799] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6185, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821835.972355687] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.635, 'd': 0.0953, 'px': 42}]
+[INFO] [1793821837.047303340] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6168, 'd': 0.0992, 'px': 45}]
+[INFO] [1793821838.245349088] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6196, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821839.320289936] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6181, 'd': 0.0992, 'px': 45}]
+[INFO] [1793821840.663725370] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6175, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821842.008880277] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6175, 'd': 0.0926, 'px': 42}]
+[INFO] [1793821843.214093004] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6194, 'd': 0.097, 'px': 44}]
+[INFO] [1793821844.834625117] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6199, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821845.906087336] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6143, 'd': 0.097, 'px': 44}]
+[INFO] [1793821847.171937265] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6175, 'd': 0.0992, 'px': 45}]
+[INFO] [1793821848.178864120] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6176, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821849.259154314] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6179, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821850.266205398] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6179, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821851.471410291] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6194, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821852.687633151] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.4528, 'y': 0.6757, 'd': 0.1084, 'px': 45}]
+[INFO] [1793821853.897607033] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.4528, 'y': 0.676, 'd': 0.1084, 'px': 45}]
+[INFO] [1793821854.808243828] [mision_frutas]: brazo: {'orden': 'calibrar', 'ok': True, 'texto': 'cero homing'}
+[INFO] [1793821854.894576720] [mision_frutas]: orden al brazo: subir
+[INFO] [1793821855.841211489] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6205, 'd': 0.097, 'px': 44}]
+[INFO] [1793821857.385081203] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.6374, 'd': 0.0998, 'px': 44}]
+[INFO] [1793821858.520026967] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6172, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821860.804731494] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6203, 'd': 0.0992, 'px': 45}]
+[INFO] [1793821863.227567310] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6196, 'd': 0.0992, 'px': 45}]
+[INFO] [1793821864.361860993] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6167, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821866.178478139] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6197, 'd': 0.0948, 'px': 43}]
+[INFO] [1793821868.388565752] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.2545, 'y': 0.6208, 'd': 0.0926, 'px': 42}]
+[INFO] [1793821873.829939672] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 2.3168, 'y': 0.6383, 'd': 0.0998, 'px': 44}]
+[INFO] [1793821878.458732604] [mision_frutas]: brazo: {'orden': 'subir', 'ok': True, 'texto': 'listo'}
+[INFO] [1793821878.697084996] [mision_frutas]: orden al brazo: cerrar
+[INFO] [1793821879.026583358] [mision_frutas]: brazo: {'orden': 'cerrar', 'ok': True, 'texto': 'sin_agarre'}
+[INFO] [1793821879.302950188] [mision_frutas]: --- RECONOCER
+[INFO] [1793821888.796853886] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 1.0636, 'y': 0.2911, 'd': 0.0592, 'px': 60}]
+[INFO] [1793821889.876692351] [mision_frutas]: cam_frutas: [{'tipo': 'mandarina', 'x': 1.2873, 'y': 0.2038, 'd': 0.0644, 'px': 53}, {'tipo': 'mandarina', 'x': 1.306, 'y': 0.1136, 'd': 0.0815, 'px': 66}]
+[INFO] [1793821893.299251601] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.1013, 'y': 0.2878, 'd': 0.043, 'px': 42}, {'tipo': 'mandarina', 'x': 1.7459, 'y': -0.1071, 'd': 0.1078, 'px': 64}]
+[INFO] [1793821894.301769695] [mision_frutas]: cam_frutas: [{'tipo': 'limon', 'x': 1.6464, 'y': -0.0791, 'd': 0.057, 'px': 36}, {'tipo': 'limon', 'x': 1.7459, 'y': 0.0058, 'd': 0.0522, 'px': 31}]
+[INFO] [1793821895.393711782] [mision_frutas]: --- IR_A_ZONA
+[INFO] [1793821896.993974421] [mision_frutas]: --- FALLO
+[ERROR] [1793821896.999701021] [mision_frutas]: FIN: ('fallo', 'IR_A_ZONA: sin /odometry/filtered reciente')
+[INFO] [1793821897.004548129] [mision_frutas]: historial: INICIO > RECONOCER > IR_A_ZONA > FALLO
