@@ -10,6 +10,10 @@ ROS 2 dentro de Docker.
   <img src="docs/media/robot_arriba.jpg" width="32%" alt="Wallens visto desde arriba">
 </p>
 
+| Frente: cámara principal (Logitech C270) y LiDAR LD19 | Atrás: cámara del gripper (OV9726) y gripper manipulador |
+|---|---|
+| <img src="docs/media/robot_frente_camara_principal.jpg" width="100%" alt="Frente de Wallens con la cámara C270 y el LiDAR"> | <img src="docs/media/robot_atras_camara_gripper.jpg" width="100%" alt="Parte de atrás de Wallens con la cámara del gripper y el gripper manipulador"> |
+
 ## El robot en acción
 
 | Misión completa (10× más rápido) | Agarre de la fruta (8× más rápido) |
