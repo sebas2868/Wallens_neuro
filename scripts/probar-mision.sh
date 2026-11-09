@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # La prueba real de la misión de frutas en un comando, en la Pi, por etapas de la más corta a la completa. Espacio
 # despejado y una persona junto al interruptor.
-#   agarre         limón 33 cm DETRÁS del centro de las ruedas, en el eje: abre, retrocede con cam_garra, cierra y
-#                  verifica (~20 s). Prueba cam_garra y el gripper, y mide x_agarre/y_agarre (ver abajo)
-#   acercar        limón a MENOS DE 1 m al frente (0.3-1.0 m, ±0.4 de lado): lo busca con cam_frutas, se acerca y gira 180°; sin brazo
+#   agarre         limón 33 cm DETRÁS del centro de las ruedas: calibra si falta cero, baja, abre, retrocede,
+#                  agarra, mide x_agarre/y_agarre abajo y sube. Homing hasta ~65 s; subida ~25 s.
+#   acercar        limón a MENOS DE 1 m al frente (0.3-1.0 m, ±0.4 de lado): calibra si falta cero, cierra en vacío,
+#                  lo busca con cam_frutas, se acerca y gira 180°
 #   hasta-agarrar  como acercar y luego lo agarra (hasta VERIFICAR)
 #   completa       lo agarra, lo deja 0.75 m DETRÁS de donde arrancó el robot y se aparta (por defecto)
 # Cada vez:
@@ -35,7 +36,7 @@ if [ -f "$AGARRE" ]; then                 # --params-file primero: los -p de des
   PARAMS="--params-file $AGARRE $PARAMS"
   echo "calibración de $AGARRE: $(grep -o '[xy]_agarre: [-0-9.]*' "$AGARRE" | tr '\n' ' ')"
 fi
-PARAMS+=" -p frutas:=limon -p angulo_linea:=1.5708${X_AGARRE:+ -p x_agarre:=$X_AGARRE}${Y_AGARRE:+ -p y_agarre:=$Y_AGARRE}"
+PARAMS+=" -p esperar_pedido:=false -p frutas:=limon -p angulo_linea:=1.5708${X_AGARRE:+ -p x_agarre:=$X_AGARRE}${Y_AGARRE:+ -p y_agarre:=$Y_AGARRE}"
 # ENTREGA_X/ENTREGA_Y (m, x al frente e y a la izquierda del robot al lanzar): van después y mandan sobre $CERCA
 PARAMS+="${ENTREGA_X:+ -p entrega_x:=$ENTREGA_X}${ENTREGA_Y:+ -p entrega_y:=$ENTREGA_Y} ${MAS:-}"
 LOG=~/.cache/wallens/mision-$(date +%Y%m%d-%H%M%S)-$ETAPA

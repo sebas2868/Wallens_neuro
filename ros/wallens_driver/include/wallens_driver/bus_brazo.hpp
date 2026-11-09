@@ -67,9 +67,10 @@ constexpr uint16_t DIR_BAUDRATE = 8;
 struct ConfigBrazo {
   std::vector<uint8_t> ids{3, 5};
   // Rangos inclusivos de direcciones permitidas: los registros que usa scripts/brazo/brazo.py
+  // {80, 81} y {84, 85}: Position D y P Gain de la pinza (ganancias de reposo contra la oscilación, 2026-11-03)
   std::vector<std::pair<uint16_t, uint16_t>> rangos{{11, 11},   {38, 39},   {48, 51},   {52, 55},   {64, 64},
-                                                     {70, 70},   {98, 98},   {102, 103}, {108, 111}, {112, 115},
-                                                     {116, 119}, {126, 146}, {222, 223}};
+                                                     {70, 70},   {80, 81},   {84, 85},   {98, 98},   {102, 103},
+                                                     {108, 111}, {112, 115}, {116, 119}, {126, 146}, {222, 223}};
   int baudrate = 57600;
   double max_ms = 12.0;           // tiempo de bus máximo de una llamada y de lo que el brazo gasta por ciclo
   double retorno_ms = 0.5;        // tiempo de retorno del motor por operación

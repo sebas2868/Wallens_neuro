@@ -68,6 +68,9 @@ class WallensImu : public rclcpp::Node {
     const double calib_rate = declare_parameter("calib_status_rate_hz", 1.0);
     lectura_ = declare_parameter("lectura", "giro");
     max_rate_ = declare_parameter("max_rate", 5.0);
+    // Ganancia del eje z del giroscopio (yaw): el BNO055 cuenta de más. 1.0 = sin corregir. Ver config/wallens_imu.yaml
+    escala_giro_z_ = declare_parameter("escala_giro_z", 1.0);
+    if (escala_giro_z_ < 0.8 || escala_giro_z_ > 1.2) throw std::runtime_error("escala_giro_z fuera de [0.8, 1.2]");
     if (!PLACEMENTS.count(placement_)) throw std::runtime_error("placement_axis_remap desconocido: " + placement_);
     if (lectura_ != "completa" && lectura_ != "giro")
       throw std::runtime_error("lectura debe ser \"completa\" o \"giro\", no \"" + lectura_ + "\"");
@@ -137,7 +140,7 @@ class WallensImu : public rclcpp::Node {
     m.header.frame_id = frame_;
     m.angular_velocity.x = w[0];
     m.angular_velocity.y = w[1];
-    m.angular_velocity.z = w[2];
+    m.angular_velocity.z = w[2] * escala_giro_z_;
     m.orientation_covariance[0] = -1;           // orientación y aceleración no disponibles (REP-145)
     m.linear_acceleration_covariance[0] = -1;
     m.angular_velocity_covariance = {0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04};
@@ -164,7 +167,7 @@ class WallensImu : public rclcpp::Node {
     m.orientation.z = z / norma;
     m.angular_velocity.x = i16(b + 0) / LSB_GIRO;
     m.angular_velocity.y = i16(b + 2) / LSB_GIRO;
-    m.angular_velocity.z = i16(b + 4) / LSB_GIRO;
+    m.angular_velocity.z = i16(b + 4) / LSB_GIRO * escala_giro_z_;
     m.linear_acceleration.x = i16(b + 20) / LSB_ACEL;
     m.linear_acceleration.y = i16(b + 22) / LSB_ACEL;
     m.linear_acceleration.z = i16(b + 24) / LSB_ACEL;
@@ -204,6 +207,7 @@ class WallensImu : public rclcpp::Node {
 
   std::string dispositivo_, frame_, placement_, lectura_;
   double max_rate_;
+  double escala_giro_z_ = 1.0;
   uint8_t direccion_, modo_;
   int fd_ = -1, fallos_ = 0;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_imu_;

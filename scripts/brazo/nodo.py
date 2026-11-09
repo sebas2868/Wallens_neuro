@@ -45,6 +45,7 @@ class NodoBrazo(Node):
         self.odom_timeout = p("odom_timeout", 2.0).value
         self.battery_timeout = p("battery_timeout", 2.0).value   # <= 0 lo desactiva (banco sin INA226)
         self.usar_tornillo = p("usar_tornillo", False).value     # el tornillo (ID 3) está roto: solo el gripper
+        self.sosten_mandarina = int(p("sosten_mandarina", 200).value)  # pinza nueva, 3 nov 20:16
 
         self.control = None                                      # hasta que exista el servicio del bus
         self.transporte = TransporteRclpy(self, self.timeout_bus, espera_servicio=None)   # un solo cliente
@@ -85,7 +86,7 @@ class NodoBrazo(Node):
         transporte = self.transporte
         with open(self.cal_ruta) as f:
             cal = json.load(f)
-        cfg = Config(watchdog=self.watchdog, periodo=self.periodo)
+        cfg = Config(watchdog=self.watchdog, periodo=self.periodo, sosten_mandarina=self.sosten_mandarina)
         brazo = Brazo(BusRos(transporte), cal, cfg, cero=Cero(), log=lambda *_: None, usar_tornillo=self.usar_tornillo)
         self.control = ControlBrazo(brazo, ruedas_quietas=self._ruedas_quietas, homing=self.homing,
                                     log=self.get_logger().info)

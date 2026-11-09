@@ -219,11 +219,12 @@ class Freno {
   Freno(double dist, double semiancho, double yaw, double minimo, double scan_timeout, bool requiere_scan,
         double cmd_timeout, double histeresis, int min_lecturas, Poligono huella = {}, double laser_x = 0.0,
         double margen_lateral = 0.03, double margen_giro = 0.03, double horizonte_giro = 0.5,
-        double retencion_giro = 1.0)
+        double retencion_giro = 1.0, double caja_timeout = 1.0, double v_caja = 0.03)
       : dist_(dist), semiancho_(semiancho), yaw_(yaw), minimo_(minimo), scan_timeout_(scan_timeout),
         requiere_scan_(requiere_scan), cmd_timeout_(cmd_timeout), histeresis_(histeresis),
         min_lecturas_(min_lecturas), huella_(std::move(huella)), laser_x_(laser_x), margen_lateral_(margen_lateral),
-        margen_giro_(margen_giro), horizonte_giro_(horizonte_giro), retencion_giro_(retencion_giro) {}
+        margen_giro_(margen_giro), horizonte_giro_(horizonte_giro), retencion_giro_(retencion_giro),
+        caja_timeout_(caja_timeout), v_caja_(v_caja) {}
 
   template <class R>
   void on_scan(const R& rangos, double angulo_min, double incremento, double ahora) {
@@ -238,6 +239,22 @@ class Freno {
     }
     t_scan = ahora;
   }
+
+  // Modo caja (2026-11-03): el robot entra de reversa a la caja con la tenaza arriba y la pared del fondo, que ve el
+  // LiDAR, tiene que quedar cerca de la punta de los dedos. Mientras alguien lo pida (a menos de caja_timeout s del
+  // último pedido) la marcha atrás frena a dist_caja en vez de a dist y va a lo sumo a v_caja. El avance y el giro no
+  // cambian. Si el que lo pide se cae, vence solo. Negativo o no finito lo apaga ya; devuelve true si quedó pedido.
+  bool on_modo_caja(double dist, double ahora) {
+    if (std::isfinite(dist) && dist >= 0.0) {
+      dist_caja = dist;
+      t_caja = ahora;
+      return true;
+    }
+    t_caja = -INF;
+    return false;
+  }
+
+  bool modo_caja(double ahora) const { return ahora - t_caja <= caja_timeout_; }
 
   // Guarda el comando; devuelve false (y lo descarta) si no es finito.
   bool on_cmd(double v_, double w_, double ahora) {
@@ -258,6 +275,8 @@ class Freno {
     bool bloqueado = false;
     std::string motivo;
     bool sin_scan = requiere_scan_ && ahora - t_scan > scan_timeout_;
+    bool caja = vv < 0.0 && modo_caja(ahora);
+    if (caja) vv = std::max(vv, -v_caja_);
     if (vv != 0.0) {
       if (sin_scan) {
         bloqueado = true;
@@ -267,11 +286,11 @@ class Freno {
         if (requiere_scan_ && !cono_ok[vv > 0 ? 1 : 0]) {
           bloqueado = true;
           motivo = "sector sin lecturas válidas suficientes (LiDAR tapado o cegado)";
-        } else if (d.has_value() && *d < dist_ + (frenando ? histeresis_ : 0.0)) {
+        } else if (d.has_value() && *d < (caja ? dist_caja : dist_) + (frenando ? histeresis_ : 0.0)) {
           bloqueado = true;
           char buf[64];
           std::snprintf(buf, sizeof buf, "obstáculo a %.2f m ", *d);
-          motivo = std::string(buf) + (vv > 0 ? "al frente" : "atrás");
+          motivo = std::string(buf) + (vv > 0 ? "al frente" : "atrás") + (caja ? " (modo caja)" : "");
         }
       }
     }
@@ -321,6 +340,8 @@ class Freno {
   double v = 0.0, w = 0.0;
   double t_cmd = -INF;
   bool frenando = false;
+  double dist_caja = 0.0;
+  double t_caja = -INF;
 
  private:
   double dist_, semiancho_, yaw_, minimo_, scan_timeout_;
@@ -328,7 +349,7 @@ class Freno {
   double cmd_timeout_, histeresis_;
   int min_lecturas_;
   Poligono huella_;
-  double laser_x_, margen_lateral_, margen_giro_, horizonte_giro_, retencion_giro_;
+  double laser_x_, margen_lateral_, margen_giro_, horizonte_giro_, retencion_giro_, caja_timeout_, v_caja_;
 };
 
 // Decide cuándo reiniciar el nodo del LiDAR. `ahora` son segundos de un reloj monótono.

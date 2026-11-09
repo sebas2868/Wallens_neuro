@@ -2,6 +2,9 @@
 // driver. Además hace de vigilante: si /scan falta scan_lost_s segundos reinicia el nodo del LiDAR (SIGINT con pkill;
 // el respawn del launch lo vuelve a lanzar), esperando cooldown_s entre reinicios.
 // Interbloqueo del brazo: mientras /brazo/ocupado sea true (el brazo se mueve) publica velocidad 0.
+// Modo caja: freno/modo_caja (std_msgs/Float32, m) pide que la marcha atrás frene a esa distancia de la huella en vez de
+// a stop_distance, a lo sumo a box_mode_max_speed, para entrar a la caja con la tenaza arriba. Vence a box_mode_timeout s
+// del último mensaje (quien lo pide lo repite); un valor negativo lo apaga. El avance y el giro no cambian.
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -16,6 +19,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/float32.hpp"
 #include "wallens_safety/freno_logica.hpp"
 
 extern char** environ;
@@ -69,7 +73,7 @@ class FrenoLidar : public rclcpp::Node {
     int min_lecturas = static_cast<int>(declare_parameter<int64_t>("min_valid_readings", 10));
     freno_ = std::make_unique<Freno>(dist, semiancho, yaw, minimo, scan_timeout, requiere_scan, cmd_timeout, histeresis,
                                      min_lecturas, huella, laser_x, margen_lateral, margen_giro, horizonte_giro,
-                                     retencion_giro);
+                                     retencion_giro, dbl("box_mode_timeout", 1.0), dbl("box_mode_max_speed", 0.03));
     vigilante_ = std::make_unique<Vigilante>(dbl("scan_lost_s", 5.0), dbl("cooldown_s", 15.0), ahora());
 
     sub_scan_ = create_subscription<sensor_msgs::msg::LaserScan>(
@@ -83,6 +87,10 @@ class FrenoLidar : public rclcpp::Node {
             RCLCPP_WARN(get_logger(), m->data ? "Brazo ocupado: las ruedas se frenan" : "Brazo libre: las ruedas obedecen");
           }
           brazo_ocupado_ = m->data;
+        });
+    sub_caja_ = create_subscription<std_msgs::msg::Float32>(
+        "freno/modo_caja", rclcpp::QoS(10), [this](std_msgs::msg::Float32::ConstSharedPtr m) {
+          freno_->on_modo_caja(m->data, ahora());
         });
     pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel_safe", rclcpp::QoS(10));
     pub_freno_ = create_publisher<std_msgs::msg::Bool>("freno_obstaculo", rclcpp::QoS(1));
@@ -109,6 +117,16 @@ class FrenoLidar : public rclcpp::Node {
   }
 
   void ciclo() {
+    bool caja = freno_->modo_caja(ahora());
+    if (caja != caja_avisado_) {
+      caja_avisado_ = caja;
+      if (caja) {
+        RCLCPP_WARN(get_logger(), "MODO CAJA: la marcha atrás frena a %.3f m de la huella (no a la distancia normal)",
+                    freno_->dist_caja);
+      } else {
+        RCLCPP_INFO(get_logger(), "Modo caja terminado: freno normal");
+      }
+    }
     auto r = freno_->ciclo(ahora());
     if (!r) {
       set_freno(false);
@@ -152,6 +170,8 @@ class FrenoLidar : public rclcpp::Node {
   std::unique_ptr<Vigilante> vigilante_;
   bool estado_publicado_ = false;
   bool brazo_ocupado_ = false;
+  bool caja_avisado_ = false;
+  rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr sub_caja_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_brazo_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub_scan_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_;

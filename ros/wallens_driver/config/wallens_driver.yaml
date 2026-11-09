@@ -8,10 +8,10 @@ wallens_driver:
     id_right: 4
     sign_left: 1                # ruedas enfrentadas: la derecha gira con signo contrario para avanzar
     sign_right: -1
-    k_left: 1.0019              # corrección de velocidad de la rueda izquierda (6 corridas en el aire)
+    k_left: 1.000               # llantas nuevas 2026-11-04, calibrar-ruedas.py: 0.996 -> +2/+3.4° izq en 1.5 m; 1.004 -> -2.6° der; 1.000 al medio
 
-    wheel_radius: 0.03625       # m (diámetro 72.5 mm)
-    wheel_separation: 0.271     # m efectivos: 238 mm medidos × 1.139 (giro de 360° con el IMU); las ruedas patinan al girar en el sitio
+    wheel_radius: 0.0360        # m, llantas nuevas 2026-11-04 (medido 36.0 mm; cinta 0.03597)
+    wheel_separation: 0.2647    # m efectivos, llantas nuevas 2026-11-04 (giro de 360° con el IMU); las ruedas patinan al girar en el sitio
 
     max_linear: 0.19            # m/s
     max_angular: 1.0            # rad/s

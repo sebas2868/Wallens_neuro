@@ -147,7 +147,8 @@ class Freno:
     """Estado del freno. Los tiempos (`ahora`) son segundos de un reloj monótono que pasa el que llama."""
 
     def __init__(self, dist, semiancho, yaw, minimo, scan_timeout, requiere_scan, cmd_timeout, histeresis,
-                 min_lecturas, huella=None, laser_x=0.0, margen_lateral=0.03, margen_giro=0.03, horizonte_giro=0.5, retencion_giro=1.0):
+                 min_lecturas, huella=None, laser_x=0.0, margen_lateral=0.03, margen_giro=0.03, horizonte_giro=0.5, retencion_giro=1.0,
+                 caja_timeout=1.0, v_caja=0.03):
         """Sin `huella` la distancia se mide desde el LiDAR en un cono de ±semiancho y el giro no se frena. Con
         huella = polígono [(x, y), ...] en base_link (ver huella_wallens), se mide desde el borde de la huella en un
         pasillo de su ancho y se anula el giro si la huella barrería algo en `horizonte_giro` s. El cono sigue sirviendo para
@@ -158,6 +159,12 @@ class Freno:
         self.huella, self.laser_x = huella, laser_x
         self.margen_lateral, self.margen_giro, self.horizonte_giro = margen_lateral, margen_giro, horizonte_giro
         self.retencion_giro = retencion_giro
+        # Modo caja (2026-11-03): el robot entra de reversa a la caja con la tenaza arriba y la pared del fondo, que ve
+        # el LiDAR, tiene que quedar cerca de la punta de los dedos. Mientras alguien lo pida (on_modo_caja, a menos de
+        # caja_timeout s del último pedido) la marcha atrás frena a dist_caja en vez de a dist y va a lo sumo a v_caja.
+        # El avance y el giro no cambian. Si el que lo pide se cae, vence solo.
+        self.caja_timeout, self.v_caja = caja_timeout, v_caja
+        self.dist_caja, self.t_caja = 0.0, -math.inf
         self.frente = self.atras = None       # menor distancia en cada sector
         self.puntos = []
         self.cono_ok = {True: False, False: False}   # el cono delantero/trasero tiene lecturas válidas suficientes
@@ -181,6 +188,18 @@ class Freno:
             self.atras = distancia_pasillo(self.puntos, self.huella, self.margen_lateral, False)
         self.t_scan = ahora
 
+    def on_modo_caja(self, dist, ahora):
+        """Pide el modo caja con `dist` (m desde la huella) por caja_timeout s. Negativo o no finito lo apaga ya;
+        devuelve True si quedó pedido."""
+        if math.isfinite(dist) and dist >= 0.0:
+            self.dist_caja, self.t_caja = dist, ahora
+            return True
+        self.t_caja = -math.inf
+        return False
+
+    def modo_caja(self, ahora):
+        return ahora - self.t_caja <= self.caja_timeout
+
     def on_cmd(self, v, w, ahora):
         """Guarda el comando; devuelve False (y lo descarta) si no es finito."""
         if not (math.isfinite(v) and math.isfinite(w)):
@@ -195,6 +214,9 @@ class Freno:
             return None
         v, w, bloqueado, motivo = self.v, self.w, False, ""
         sin_scan = self.requiere_scan and ahora - self.t_scan > self.scan_timeout
+        caja = v < 0.0 and self.modo_caja(ahora)
+        if caja:
+            v = max(v, -self.v_caja)
         if v != 0.0:
             if sin_scan:
                 bloqueado = True
@@ -205,9 +227,9 @@ class Freno:
                     bloqueado = True
                     motivo = "sector sin lecturas válidas suficientes (LiDAR tapado o cegado)"
                 # histéresis: una vez frenado, se suelta solo a stop_distance + hysteresis (el objeto en el borde oscila)
-                elif d is not None and d < self.dist + (self.histeresis if self.frenando else 0.0):
+                elif d is not None and d < (self.dist_caja if caja else self.dist) + (self.histeresis if self.frenando else 0.0):
                     bloqueado = True
-                    motivo = f"obstáculo a {d:.2f} m {'al frente' if v > 0 else 'atrás'}"
+                    motivo = f"obstáculo a {d:.2f} m {'al frente' if v > 0 else 'atrás'}" + (" (modo caja)" if caja else "")
         self.frenando = bloqueado
         # Giro (solo con huella): sin scan no se sabe qué barre la huella; si no, se simula el barrido
         if self.huella is not None and w != 0.0:

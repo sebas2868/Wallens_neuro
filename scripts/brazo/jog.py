@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from .bus import ErrorBus, Reloj
 from .brazo import (ACELERACION, BLOQUE, CORRIENTE_ACTUAL, CORRIENTE_META, ERROR_HW, LIMITE_CORRIENTE, MODELO, MODO,
-                    POS_ACTUAL, POS_META, TEMPERATURA, TORNILLO, TORQUE, VELOCIDAD, VOLTAJE, AbortoDuro, Config,
+                    POS_ACTUAL, POS_META, TEMPERATURA, TORNILLO, TORQUE, VELOCIDAD, VOLTAJE, WATCHDOG, AbortoDuro, Config,
                     con_signo)
 
 
@@ -98,6 +98,9 @@ class Jog:
         if modelo != MODELO:
             raise AbortoDuro(f"El ID {TORNILLO} no responde como XM430-W210 (modelo {modelo})")
         pos, _, _, _ = self.leer()
+        # el nodo del brazo arma el Bus Watchdog; al parar el servicio se dispara (registro 98 = 255) y el motor rechaza
+        # el perfil y las metas con error 4 hasta escribir 0 (2026-11-03: "fallo escribiendo 112=40 (err=4)")
+        self._escribir(WATCHDOG, 1, 0)
         self._escribir(TORQUE, 1, 0)                    # torque off para tocar EEPROM y modo
         self._escribir(MODO, 1, 5)                      # posición basada en corriente (multivuelta)
         self._escribir(LIMITE_CORRIENTE, 2, c.limite_corriente)

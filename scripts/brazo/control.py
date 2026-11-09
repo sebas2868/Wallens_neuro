@@ -15,7 +15,7 @@ from .brazo import CIERRE_MEDIDO, TORNILLO, Aborto, AbortoDuro, AbortoSuave, Sin
 class Resultado:
     ok: bool
     mensaje: str
-    valor: str = ""          # recoger: "agarrado" o "sin_agarre"
+    valor: str = ""          # pinza nueva: "por_verificar"; cierre en vacío conserva "sin_agarre"
 
 
 class ControlBrazo:
@@ -29,7 +29,7 @@ class ControlBrazo:
         self._en_orden = False                  # una orden en curso: lo que publica brazo/ocupado
         self.energizado = False
         self.congelado = False
-        self.objeto = False                     # el último recoger() terminó "agarrado" y no se ha soltado
+        self.objeto = False                     # posible fruta sostenida; no certifica el agarre por posición
         self.parada = False                     # /parada activa
         self.bateria_ok = True                  # false tras bateria_critica(): solo se acepta apagar
         self.fase = "inactivo"
@@ -122,12 +122,12 @@ class ControlBrazo:
         def f():
             self._fase("calibrando")
             return Resultado(True, "cero " + self.brazo.calibrar(homing=self.homing), "")
-        return self._ejecutar("calibrar", f, necesita_ruedas=False)
+        return self._ejecutar("calibrar", f)
 
     def recoger(self):
         def f():
             r = self.brazo.recoger()
-            self.objeto = r == "agarrado"
+            self.objeto = r in ("agarrado", "por_verificar")  # conservador: puede sostener una fruta
             return Resultado(True, r, r)
         return self._ejecutar("recoger", f, necesita_calibrado=True)
 
@@ -138,18 +138,45 @@ class ControlBrazo:
             self.brazo.abrir()
             self.objeto = self.congelado = False
             return Resultado(True, "gripper abierto")
-        return self._ejecutar("soltar", f, permite_congelado=True, necesita_ruedas=False)
+        return self._ejecutar("soltar", f, permite_congelado=True)
 
     def orden(self, texto):
-        """Órdenes sueltas de la misión (ros/wallens_mision): abrir, soltar, rearmar, cerrar, cerrar:<tipo>, bajar, subir.
-        `valor`: "listo", o "agarrado"/"sin_agarre" al cerrar. Sin tornillo, bajar y subir se rechazan."""
+        """Órdenes sueltas de la misión (ros/wallens_mision): abrir, soltar, soltar:<ticks>, rearmar, cerrar, cerrar:<tipo>,
+        bajar, subir, calibrar.
+        `valor`: "listo" o "por_verificar" al cerrar una fruta. Sin tornillo, bajar y subir se rechazan."""
         nombre, _, tipo = texto.partition(":")
+        if nombre in ("bajar_hasta_contacto", "subir_corto"):
+            if TORNILLO not in self.brazo.ids:
+                return Resultado(False, "sin ascensor")
+            partes = tipo.split(":")
+            n = 2 if nombre == "bajar_hasta_contacto" else 1
+            if len(partes) != n or not all(p.isdigit() and int(p) > 0 for p in partes):
+                return Resultado(False, f"{nombre}: alturas en ticks POR MEDIR; indicar {n} entero(s) positivo(s)")
+            valores = [int(p) for p in partes]
+            def f():
+                self._fase(nombre)
+                valor = self.brazo.bajar_hasta_contacto(*valores) if n == 2 else self.brazo.subir_corto(*valores)
+                return Resultado(True, str(valor), valor if n == 2 else "listo")
+            return self._ejecutar(texto, f, necesita_calibrado=True)
+        if nombre == "soltar" and tipo:
+            # soltar:<ticks>: abre solo eso desde donde está (en la caja, abierta del todo choca con las paredes)
+            if not tipo.isdigit():
+                return Resultado(False, f"soltar:<ticks> necesita un número de ticks: {texto}")
+            def f():
+                self._fase("soltando")
+                self.brazo.entreabrir(int(tipo))
+                self.objeto = self.congelado = False
+                return Resultado(True, "gripper entreabierto", "listo")
+            return self._ejecutar(texto, f, permite_congelado=True)
         if nombre in ("abrir", "soltar", "rearmar"):
             def f():
                 if nombre == "rearmar":
                     # una misión nueva rearma un brazo congelado por un fallo anterior, pero solo sin fruta en la pinza
                     if self.objeto:
                         return Resultado(False, "rearmar rechazada: lleva una fruta; soltarla a mano (brazo/soltar)")
+                    if TORNILLO in self.brazo.ids:
+                        self.congelado = False
+                        return Resultado(True, "rearmado sin mover la pinza; subir antes de abrir", "listo")
                     self.log("REARMADO por la misión: " + ("estaba congelado, " if self.congelado else "") + "abre la pinza")
                 self._fase("abriendo")
                 if self.brazo.cerrada is None:       # sin medir: cerrar los dedos aquí barrería la fruta
@@ -157,18 +184,31 @@ class ControlBrazo:
                 self.brazo.abrir()
                 self.objeto = self.congelado = False
                 return Resultado(True, "gripper abierto", "listo")
-            return self._ejecutar(texto, f, permite_congelado=nombre != "abrir", necesita_ruedas=False)
+            return self._ejecutar(texto, f, permite_congelado=nombre != "abrir")
         if nombre == "cerrar":
             def f():
                 self._fase("cerrando")
                 if self.brazo.cerrada is None:       # nodo recién arrancado: INICIO cierra antes de navegar
                     self.brazo.usar_cierre(CIERRE_MEDIDO)
-                r = "agarrado" if self.brazo.cerrar_fruta(tipo or None) is not None else "sin_agarre"
-                self.objeto = r == "agarrado"
+                cierre = self.brazo.cerrar_fruta(tipo or None)
+                r = "por_verificar" if cierre == "por_verificar" else ("agarrado" if cierre is not None else "sin_agarre")
+                self.objeto = r in ("agarrado", "por_verificar")
                 return Resultado(True, r, r)
             return self._ejecutar(texto, f)
         if nombre in ("bajar", "subir"):
-            return Resultado(False, "sin ascensor" if TORNILLO not in self.brazo.ids else f"{nombre}: falta implementar")
+            if TORNILLO not in self.brazo.ids:
+                return Resultado(False, "sin ascensor")
+            def f():
+                self._fase("bajando" if nombre == "bajar" else "subiendo")
+                # sin `agarre`: tras cerrar:<tipo> la pinza queda con la corriente de sostén (limón 200), que _mover
+                # tomaría por un resbalón (umbral = mitad de corriente_apriete, 312). El agarre lo vigila cam_garra
+                self.brazo.bajar() if nombre == "bajar" else self.brazo.subir()
+                return Resultado(True, "tornillo " + ("abajo" if nombre == "bajar" else "arriba"), "listo")
+            return self._ejecutar(texto, f, necesita_calibrado=True)
+        if nombre == "calibrar":
+            if TORNILLO not in self.brazo.ids:
+                return Resultado(False, "sin ascensor")
+            return self.calibrar()
         return Resultado(False, f"orden desconocida: {texto}")
 
     def congelar(self):

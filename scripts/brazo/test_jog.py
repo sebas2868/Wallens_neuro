@@ -14,6 +14,16 @@ class TestJog(unittest.TestCase):
         self.jog = Jog(self.bus, CAL, ConfigJog(), reloj=self.bus.reloj, log=lambda *_: None)
         self.jog.preparar()
 
+    def test_preparar_con_el_watchdog_disparado_lo_limpia_y_mueve(self):
+        # 2026-11-03: tras parar wallens-mision el watchdog del tornillo quedó disparado (98 = 255) y el jog abortaba
+        # con "fallo escribiendo 112=40 (err=4)"
+        bus = BusFalso(tornillo_pos=1000, tope_abajo=1600, tope_arriba=-5000)
+        bus.tornillo.disparado, bus.tornillo.regs[98] = True, 255
+        jog = Jog(bus, CAL, ConfigJog(), reloj=bus.reloj, log=lambda *_: None)
+        self.assertEqual(jog.preparar(), 1000)
+        self.assertEqual(bus.tornillo.regs[98], 0)
+        self.assertEqual(jog.subir(300)["estado"], "llego")
+
     def test_preparar_no_salta_y_configura_en_orden(self):
         m = self.bus.tornillo
         self.assertEqual((m.regs[11], m.regs[64], m.regs[116], m.regs[112], m.regs[108]), (5, 1, 1000, 40, 10))

@@ -16,20 +16,23 @@ from .bus import ErrorBus, Reloj
 TORNILLO, PINZA = 3, 5
 MODELO = 1030                       # XM430-W210
 MARCA_ADDR, MARCA = 222, 0xCA11     # Indirect Address 28: RAM sin uso; vuelve a su valor por defecto sin los 12 V
-ABIERTA, CERRADA, MARGEN_PINZA = 2794, 3851, 60   # recorrido medido del gripper
-# corriente de apriete por fruta: la mínima que la sostuvo firme sin marcarla en la fase G (2026-11-02:
-# limón 200, naranja 300) + 25 % para el traslado. Sin tipo, o uno desconocido, usa Config.corriente_apriete.
-# dónde se juntan los dedos: medir_cierre dio 3890, 3891 y 3891 (2026-11-02). La misión usa este valor y no mide:
-# al medir cierra los dedos y en plena misión barrió el limón que estaba detrás.
-CIERRE_MEDIDO = 3890
-APRIETE_FRUTA = {"limon": 250, "naranja": 375}
-# tras agarrar baja a la mínima que la sostuvo firme: sostener el apriete en los traslados dejó al gripper con
-# sobrecarga (registro 70 = 32, 2026-11-02)
-SOSTEN_FRUTA = {"limon": 200, "naranja": 300}
+# recorrido del gripper NUEVO, medido a mano con el torque apagado (2026-11-03, ~/mirar_pinza.py): abierto del todo
+# 2866, dedos tocándose 3811. El viejo era 2794 / 3851 y medir_cierre lo juntaba en 3890.
+ABIERTA, CERRADA, MARGEN_PINZA = 2866, 3811, 60
+# Corriente por fruta: no sumar el 25 % antiguo; las pruebas nuevas dieron 200 sin marcar las tres frutas.
+# Pinza nueva, prueba 2026-11-03 20:16: las tres frutas firmes sin marcas con 200.
+# dónde se juntan los dedos: la misión usa este valor y no mide (al medir cierra los dedos y en plena misión barrió
+# el limón que estaba detrás). Gripper nuevo: PROVISIONAL = el cierre a mano (3811) hasta que medir_cierre (G0 de
+# prueba-pinza-frutas.py) dé el suyo. Con el 3890 del viejo, cerrar en vacío se tomaría por "agarrado".
+CIERRE_MEDIDO = 3811
+APRIETE_FRUTA = {"limon": 200, "naranja": 200}
+# Mantener esta corriente tras cerrar; el apriete mayor antiguo produjo sobrecarga (registro 70 = 32).
+SOSTEN_FRUTA = {"limon": 200, "naranja": 200}
 
 # Direcciones de la tabla de control
 MODO, LIMITE_CORRIENTE, LIM_POS_MAX, LIM_POS_MIN = 11, 38, 48, 52
 TORQUE, ERROR_HW, WATCHDOG = 64, 70, 98
+GANANCIA_D, GANANCIA_P = 80, 84                   # Position D/P Gain (RAM)
 CORRIENTE_META, ACELERACION, VELOCIDAD, POS_META = 102, 108, 112, 116
 CORRIENTE_ACTUAL, POS_ACTUAL, VOLTAJE, TEMPERATURA = 126, 132, 144, 146
 BLOQUE = TEMPERATURA - CORRIENTE_ACTUAL + 1       # 21 bytes: de la corriente a la temperatura
@@ -61,15 +64,19 @@ class Config:
     # Tornillo
     vel_tornillo: int = 100          # Profile Velocity (0.229 rpm por unidad): ~23 rpm
     acel_tornillo: int = 20          # Profile Acceleration (214.577 rev/min² por unidad)
-    vel_busqueda: int = 87           # homing y despegue (~20 rpm); a 100 (23 rpm) el tornillo se encajó en el tope
+    vel_busqueda: int = 40           # homing y despegue (~9 rpm, la del jog que detectó la base el 2026-11-03). Antes 87
+                                     # (~20 rpm): sobre 60 el tope encaja el tornillo y hay que arrancarlo con corriente
+                                     # 250; así se rompió el 2026-11-01. A 100 (23 rpm) ya se había encajado
     acel_busqueda: int = 10
     corriente_busqueda: int = 90     # tope de torque del homing y de la detección de la base (Goal Current, 2.69 mA por unidad): ~240 mA
     corriente_tornillo: int = 150    # ~400 mA
-    corriente_retiro: int = 250      # para despegar del tope (~670 mA)
+    corriente_despegue: int = 150    # primer intento de despegue del tope (~400 mA); si no sale, corriente_retiro
+    corriente_retiro: int = 250      # para despegar del tope (~670 mA), solo si con corriente_despegue no salió
+    asentar_s: float = 0.3           # s quieto en el tope, con torque reiniciado, antes de despegar
     corriente_aborto_t: int = 250    # sobre esto sostenido, algo frena el tornillo
     limite_corriente_t: int = 300    # tope de EEPROM (~800 mA)
     retiro: int = 40                 # ticks que se retira del tope tras el homing
-    altura: int = 40                 # ticks sobre el tope inferior donde se agarra
+    altura: int = 3200               # 2026-11-04: pasa una hoja bajo los dedos abiertos
     ventana: float = 0.5             # s de la ventana para medir avance
     avance_min: int = 20             # ticks mínimos de avance por ventana a velocidad de trabajo
     avance_tope: int = 5             # ticks bajo los cuales el tornillo está detenido (homing)
@@ -87,10 +94,22 @@ class Config:
     corriente_agarre: int = 650      # fuerza máxima de agarre (~1750 mA)
     corriente_pinza: int = 120       # tope al abrir (~320 mA)
     corriente_aborto_p: int = 100    # sobre esto sostenido al moverse en vacío, algo frena la pinza
+    atasco_p_s: float = 0.0          # > 0: la corriente alta solo aborta si además la pinza lleva esto sin avanzar
+    avance_p: int = 5                # ticks que cuentan como "avanzó" para atasco_p_s
     limite_corriente_p: int = 690    # tope de EEPROM (~1860 mA)
     umbral_contacto: int = 50        # corriente que, con la pinza detenida, indica contacto
     corriente_apriete: int = 625     # tras el contacto sigue cerrando hasta esta corriente
+    sosten_mandarina: int = 200     # pinza nueva, prueba 2026-11-03 20:16; 0 rechaza la orden
     corriente_reposo_p: int = 30     # tras abrir (~80 mA): con la corriente de apertura la pinza oscilaba por el juego
+    # Ganancias del control de posición de la pinza (medidas en el robot el 2026-11-03, scripts de diagnóstico en
+    # docs/gripper-plan.md). Se mueve con las normales (las que traía el motor, con las que se probó el agarre); al quedar
+    # abierta y quieta pasa a las de reposo: con P800 D4000 oscilaba 12-16 ticks a ~10 Hz contra el juego de los
+    # engranajes y la tensión de los dedos (la "vibración"); con P120 D300, 1 tick (ruido del encoder) en 5 de 5.
+    # P200 D300 quedó al límite (2 de 4 oscilaron). None = no tocar las ganancias
+    p_pinza: int = 800
+    d_pinza: int = 4000
+    p_reposo_p: int = 120
+    d_reposo_p: int = 300
     corriente_cierre: int = 80       # medir_cierre: cierra en vacío con poca fuerza (~215 mA) hasta juntar los dedos
     cierre_extra: int = 150          # ticks más allá de CERRADA que medir_cierre puede buscar
     margen_dedos: int = 15           # contacto a menos de esto del cierre medido = dedos juntos, no un objeto;
@@ -159,6 +178,7 @@ class Brazo:
         self.cerrada = None                                         # dónde se juntan los dedos, medido
         self.abajo = self.arriba = self.agarre_t = None            # None = sin calibrar
         self.ultimo_tramo = None
+        self._ganancias_p = None                                    # (P, D) escritas en la pinza; None = sin saber
 
     # --- bajo nivel -------------------------------------------------------------------------------------
     def _leer(self, i, addr, n):
@@ -252,6 +272,10 @@ class Brazo:
             raise AbortoDuro(f"Posición inicial de la pinza {ini_p} fuera del recorrido conocido: revisar a mano")
         c = self.cfg
         for i in self.ids:
+            # primero el watchdog: si el nodo anterior murió con el brazo energizado (reinicio del servicio) quedó
+            # disparado y el motor rechaza toda meta con error 4 (fallo real del 2026-11-03: dirección 116 del ID 3).
+            # El gripper se limpia solo con el reboot de arriba; el tornillo no se reinicia (perdería las vueltas)
+            self._escribir(i, WATCHDOG, 1, 0)
             self._escribir(i, TORQUE, 1, 0)             # torque off para tocar EEPROM y modo
             self._escribir(i, MODO, 1, 5)               # posición basada en corriente (multivuelta)
         if TORNILLO in self.ids:
@@ -264,6 +288,8 @@ class Brazo:
         if TORNILLO in self.ids:
             self._escribir(TORNILLO, POS_META, 4, ini_t)    # meta = posición actual, sin salto
         self._escribir(PINZA, POS_META, 4, min(max(ini_p, self.pos_abrir), self.tope_apriete))
+        self._ganancias_p = None
+        self._ganancias_pinza(reposo=False)
 
     def _reiniciar(self, i):
         """Reboot del gripper siempre: una alerta de hardware (2026-11-02: sobrecarga tras las pruebas de la pinza) se
@@ -286,6 +312,8 @@ class Brazo:
         if i == TORNILLO:
             self.abajo = self.arriba = self.agarre_t = None
             self.cero.borrar()
+        else:
+            self._ganancias_p = None                  # el reboot vuelve a las de fábrica
 
     def energizar(self):
         """Enciende el torque de ambos motores y arma el watchdog."""
@@ -343,15 +371,46 @@ class Brazo:
         return apagados
 
     # --- gripper ----------------------------------------------------------------------------------------
+    def _exigir_altura_pinza(self):
+        """Nunca abrir/cerrar junto al piso, ni con el cero desconocido. No eleva por su cuenta."""
+        if TORNILLO not in self.ids:
+            return
+        if self.abajo is None:
+            raise SinCero("pinza sin cero: calibrar y subir antes de abrir o cerrar")
+        self._exigir_calibrado()
+        altura = self.signo * (self.abajo - self._pos(TORNILLO))
+        if altura < self.cfg.altura - self.cfg.llegada_t:
+            raise SinCero(f"pinza junto al piso ({altura} ticks): subir antes de abrir o cerrar")
+
+    def _ganancias_pinza(self, reposo):
+        """Ganancias de reposo (abierta y quieta) o normales (para moverla); solo escribe si cambian."""
+        c = self.cfg
+        p, d = (c.p_reposo_p, c.d_reposo_p) if reposo else (c.p_pinza, c.d_pinza)
+        if p is None or d is None or self._ganancias_p == (p, d):
+            return
+        self._escribir(PINZA, GANANCIA_P, 2, p)
+        self._escribir(PINZA, GANANCIA_D, 2, d)
+        self._ganancias_p = (p, d)
+
     def abrir(self):
         """Abre el gripper y congela la meta donde llegó (meta = posición actual). Con el juego de los engranajes,
         dejar la meta en la apertura hace que el controlador siga corrigiendo y la pinza oscile; con la meta en la
         posición real el error es cero. Al cerrar se escribe una meta nueva."""
         self.ir_pinza(self.pos_abrir)
+        self._quedar_quieta()
+
+    def entreabrir(self, ticks):
+        """Abre `ticks` desde donde está, sin pasar la apertura: suelta la fruta dentro de la caja sin que los dedos
+        abiertos del todo choquen con sus paredes (prueba de la caja, 2026-11-03: abiertos tocaron la caja en 3243)."""
+        self.ir_pinza(max(self.pos_abrir, self._pos(PINZA) - abs(int(ticks))))
+        self._quedar_quieta()
+
+    def _quedar_quieta(self):
         self._escribir(PINZA, POS_META, 4, self._pos(PINZA))
         if self.cfg.corriente_reposo_p:
             # estrategia C de gripper-plan.md: con la meta congelada seguía oscilando; con poca corriente no empuja el juego
             self._escribir(PINZA, CORRIENTE_META, 2, self.cfg.corriente_reposo_p)
+        self._ganancias_pinza(reposo=True)            # quieta: sin esto oscila contra el juego
 
     def usar_cierre(self, cerrada):
         """Como medir_cierre pero con un valor ya medido, sin mover nada."""
@@ -362,8 +421,10 @@ class Brazo:
         llegar hasta ese punto (frutas chicas como el limón no tocaban antes de CERRADA - MARGEN_PINZA) y un contacto
         a menos de `zona_dedos` de él es "dedos juntos", no un objeto. Deja la pinza casi cerrada, sin presión;
         devuelve la posición."""
+        self._exigir_altura_pinza()
         c = self.cfg
         limite = CERRADA + c.cierre_extra
+        self._ganancias_pinza(reposo=False)
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
         self._escribir(PINZA, CORRIENTE_META, 2, c.corriente_cierre)
         self._escribir(PINZA, POS_META, 4, limite)
@@ -394,18 +455,30 @@ class Brazo:
 
     def ir_pinza(self, destino):
         """Mueve el gripper a `destino` en vacío (velocidad y corriente de apertura) vigilando corriente y tiempo."""
+        self._exigir_altura_pinza()
         c = self.cfg
+        self._ganancias_pinza(reposo=False)
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_pinza)
         self._escribir(PINZA, CORRIENTE_META, 2, c.corriente_pinza)
         self._escribir(PINZA, POS_META, 4, destino)
         inicio, mala = self.reloj.ahora(), 0
+        ref_pos, ref_t = self._pos(PINZA), inicio
         while abs(self._pos(PINZA) - destino) > c.llegada_p:
             self._dormir(c.periodo)
             self._vigilar()
-            alta = abs(self._corriente(PINZA)) > c.corriente_aborto_p and self.reloj.ahora() - inicio > c.gracia_p
+            ahora = self.reloj.ahora()
+            alta = abs(self._corriente(PINZA)) > c.corriente_aborto_p and ahora - inicio > c.gracia_p
+            if c.atasco_p_s > 0:
+                # gripper nuevo (2026-11-03): moverse ya pide corriente alta (roce de los dedos). Solo aborta si además
+                # lleva atasco_p_s sin avanzar: con la corriente limitada a Goal Current no puede hacer más fuerza
+                pos = self._pos(PINZA)
+                if abs(pos - ref_pos) > c.avance_p:
+                    ref_pos, ref_t = pos, ahora
+                alta = alta and ahora - ref_t > c.atasco_p_s
             mala = mala + 1 if alta else 0
             if mala >= c.lecturas_aborto:
-                raise AbortoSuave(f"Corriente de la pinza > {c.corriente_aborto_p}: algo la frena")
+                raise AbortoSuave(f"Corriente de la pinza > {c.corriente_aborto_p}"
+                                  + (f" y {c.atasco_p_s} s sin avanzar" if c.atasco_p_s > 0 else "") + ": algo la frena")
             if self.reloj.ahora() - inicio > c.tiempo_max_p:
                 raise AbortoSuave(f"La pinza no llegó a {destino} en {c.tiempo_max_p} s")
 
@@ -420,7 +493,9 @@ class Brazo:
         de la pinza con la fuerza alcanzada, o None si no hay objeto o no agarra (la pinza queda sin soltar).
         Con `sosten` (corriente que basta para sostener la fruta), llegar al tope con al menos esa corriente también
         es agarre: un limón blando se comprime hasta el tope sin llegar al apriete (2026-11-02: 216-230 < 250)."""
+        self._exigir_altura_pinza()
         c = self.cfg
+        self._ganancias_pinza(reposo=False)
         self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
         self._escribir(PINZA, CORRIENTE_META, 2, c.corriente_agarre)
         self._escribir(PINZA, POS_META, 4, self.tope_apriete)
@@ -478,20 +553,40 @@ class Brazo:
         return None
 
     def cerrar_fruta(self, tipo=None):
-        """cerrar_y_apretar con la corriente de apriete de esa fruta (orden cerrar:<tipo> de la misión)."""
+        """La pinza nueva NO distingue vacío de fruta por posición: cierre limitado, luego verificación visual."""
         c = self.cfg
-        apriete = APRIETE_FRUTA.get(tipo, c.corriente_apriete)
-        antes = c.corriente_apriete, c.corriente_agarre
-        c.corriente_apriete = apriete
-        c.corriente_agarre = min(apriete + 40, c.limite_corriente_p - 20)
-        try:
-            agarre = self.cerrar_y_apretar(SOSTEN_FRUTA.get(tipo))
-        finally:
-            c.corriente_apriete, c.corriente_agarre = antes
-        if agarre is not None and tipo in SOSTEN_FRUTA:
-            self._escribir(PINZA, CORRIENTE_META, 2, SOSTEN_FRUTA[tipo])   # la meta queda donde apretó
-            self.log(f"    sosteniendo con corriente {SOSTEN_FRUTA[tipo]}")
-        return agarre
+        if tipo is None:
+            return self.cerrar_y_apretar()  # cierre en vacío del inicio; no certifica una fruta
+        sosten = c.sosten_mandarina if tipo == "mandarina" else SOSTEN_FRUTA.get(tipo)
+        if sosten is None or not (0 < sosten < c.limite_corriente_p - 20):
+            raise SinCero(f"corriente de sostén de {tipo} POR MEDIR o fuera del límite")
+        return self._cerrar_sin_juzgar(sosten)
+
+    def _cerrar_sin_juzgar(self, sosten):
+        self._exigir_altura_pinza()
+        c = self.cfg
+        self._ganancias_pinza(reposo=False)
+        self._escribir(PINZA, VELOCIDAD, 4, c.vel_agarre)
+        self._escribir(PINZA, CORRIENTE_META, 2, sosten)
+        # Límite de búsqueda ya usado por medir_cierre; corriente nunca supera el sostén medido.
+        limite = CERRADA + c.cierre_extra
+        self._escribir(PINZA, POS_META, 4, limite)
+        inicio, quietas = self.reloj.ahora(), []
+        while True:
+            self._dormir(c.periodo)
+            self._vigilar()
+            ahora, actual = self.reloj.ahora(), self._pos(PINZA)
+            quietas.append((ahora, actual))
+            while quietas and ahora - quietas[0][0] > c.quieta_s:
+                quietas.pop(0)
+            if (abs(actual-limite) <= c.llegada_p or
+                    (quietas[-1][0]-quietas[0][0] >= c.quieta_s-c.periodo
+                     and max(p for _, p in quietas)-min(p for _, p in quietas) <= 3)):
+                # Conservar la meta y el límite de corriente medido: no soltar presión al alcanzar contacto.
+                self.log("    cierre terminado, agarre POR VERIFICAR con cámara; posición no concluyente")
+                return "por_verificar"
+            if ahora - inicio > c.tiempo_max_p:
+                raise AbortoSuave("La pinza no terminó el cierre limitado")
 
     # --- tornillo ---------------------------------------------------------------------------------------
     def _mover(self, destino, agarre=None, velocidad=None, corriente_max=None):
@@ -535,15 +630,15 @@ class Brazo:
             if ahora - inicio > c.tiempo_max_t:
                 raise AbortoSuave(f"El tornillo no llegó a {destino} en {c.tiempo_max_t} s")
 
-    def _buscar_tope_abajo(self):
+    def _buscar_tope_abajo(self, limite_pos=None, inicio_contacto=None):
         """Baja despacio hasta que el tornillo se detiene con corriente; devuelve la posición del tope."""
         c = self.cfg
         inicio_pos = self._pos(TORNILLO)
         limite = self.recorrido + 2 * 4096          # puede arrancar en cualquier punto del recorrido
-        self._escribir(TORNILLO, VELOCIDAD, 4, c.vel_busqueda)
+        self._escribir(TORNILLO, VELOCIDAD, 4, min(40, c.vel_busqueda) if limite_pos is not None else c.vel_busqueda)
         self._escribir(TORNILLO, ACELERACION, 4, c.acel_busqueda)
-        self._escribir(TORNILLO, CORRIENTE_META, 2, c.corriente_busqueda)
-        self._escribir(TORNILLO, POS_META, 4, inicio_pos + self.signo * limite)
+        self._escribir(TORNILLO, CORRIENTE_META, 2, min(120, c.corriente_busqueda) if limite_pos is not None else c.corriente_busqueda)
+        self._escribir(TORNILLO, POS_META, 4, limite_pos if limite_pos is not None else inicio_pos + self.signo * limite)
         t0 = ultima = self.reloj.ahora()
         pos_ventana, paradas = inicio_pos, 0
         while True:
@@ -551,11 +646,19 @@ class Brazo:
             self._vigilar()
             actual, cor = self._pos(TORNILLO), self._corriente(TORNILLO)
             ahora = self.reloj.ahora()
+            if limite_pos is not None and self.signo * (limite_pos - actual) <= c.llegada_t:
+                self._asentar_en_tope(corriente=min(120, c.corriente_busqueda))
+                return None                # fondo de la ventana: nunca seguir hasta la base
             if ahora - ultima >= c.ventana:
                 if ahora - t0 > c.gracia:
                     detenido = abs(actual - pos_ventana) < c.avance_tope and abs(cor) >= c.corriente_tope
                     paradas = paradas + 1 if detenido else 0
                     if paradas >= c.ventanas_tope:
+                        if limite_pos is not None:
+                            self._asentar_en_tope(corriente=min(120, c.corriente_busqueda))
+                            if self.signo * (actual - inicio_contacto) < 0:
+                                raise AbortoSuave("contacto antes de la ventana de la baldosa")
+                            return actual
                         self._escribir(TORNILLO, POS_META, 4, actual)   # deja de empujar
                         self.log(f"    tope inferior en {actual} (corriente {cor}, bajó {abs(actual - inicio_pos)} ticks)")
                         return actual
@@ -564,6 +667,23 @@ class Brazo:
                 raise AbortoSuave(f"{limite} ticks sin tope inferior: algo no está bien")
             if ahora - t0 > c.tiempo_homing:
                 raise AbortoSuave(f"Sin tope inferior en {c.tiempo_homing} s")
+
+    def _asentar_en_tope(self, corriente=None):
+        """Deja el tornillo quieto en el tope antes de despegarlo. Frenado contra la base, el perfil del motor sigue
+        "bajando": una meta nueva con más corriente terminaba esa bajada contra la base y lo encajaba (2026-11-03: bajó
+        227 ticks más con 250 y no se despegó). Apagar y prender el torque reinicia el perfil en la posición real; el
+        tornillo sin fin se sostiene solo y el motor no pierde las vueltas (eso solo lo hace un reboot)."""
+        c = self.cfg
+        self._escribir(TORNILLO, CORRIENTE_META, 2, c.corriente_busqueda if corriente is None else corriente)
+        self._escribir(TORNILLO, TORQUE, 1, 0)
+        pos = self._pos(TORNILLO)
+        self._escribir(TORNILLO, POS_META, 4, pos)
+        self._escribir(TORNILLO, TORQUE, 1, 1)
+        fin = self.reloj.ahora() + c.asentar_s
+        while self.reloj.ahora() < fin:                # vigilando: el watchdog dispara a los 200 ms sin bus
+            self._dormir(c.periodo)
+            self._vigilar()
+        return pos
 
     def _cero_vigente(self):
         """True si la marca de la RAM del motor sigue puesta (no hubo corte de energía) y el cero guardado cuadra."""
@@ -591,9 +711,9 @@ class Brazo:
 
     def calibrar(self, forzar=False, homing=True):
         """Fija el cero del tornillo. Devuelve "reusada" si la marca del motor y el cero guardado siguen valiendo,
-        o "homing" si hubo que bajar al tope inferior (abre la pinza primero; el tornillo queda 40 ticks sobre él).
-        Con homing=False, sin cero vigente lanza SinCero y no mueve el tornillo."""
-        self.abrir()
+        o "homing" si hubo que bajar al tope inferior (el tornillo queda 40 ticks sobre él).
+        Con homing=False, sin cero vigente lanza SinCero y no mueve el tornillo.
+        NO mueve la pinza (2026-11-04): con el ascensor en el piso los dedos rozan; la pinza se mueve tras subir."""
         if not forzar and self._cero_vigente():
             self.log("--- Cero reusado (no hubo corte de energía)")
             return "reusada"
@@ -602,12 +722,19 @@ class Brazo:
         self.log("--- Homing: bajando el tornillo hasta el tope inferior")
         self.abajo = None
         tope = self._buscar_tope_abajo()
+        self._asentar_en_tope()
         self.log("--- Despegando el tornillo del tope")
-        try:
-            self._mover(tope - self.signo * self.cfg.retiro, velocidad=self.cfg.vel_busqueda,
-                        corriente_max=self.cfg.corriente_retiro)
-        except AbortoSuave as e:
-            raise AbortoSuave(f"El tornillo no se despega del tope inferior ({e})") from e
+        c = self.cfg
+        corrientes = sorted({c.corriente_despegue, c.corriente_retiro})
+        for n, corriente in enumerate(corrientes):
+            try:
+                self._mover(tope - self.signo * c.retiro, velocidad=c.vel_busqueda, corriente_max=corriente)
+                break
+            except AbortoSuave as e:
+                if n == len(corrientes) - 1 or "sin avanzar" not in str(e):
+                    raise AbortoSuave(f"El tornillo no se despega del tope inferior ({e})") from e
+                self.log(f"    no se despegó con corriente {corriente}: pruebo con {corrientes[n + 1]}")
+                self._asentar_en_tope()
         self._fijar_cero(tope)
         self.cero.guardar(tope)
         try:
@@ -621,31 +748,45 @@ class Brazo:
         self._exigir_calibrado()
         return self._mover(self.arriba, agarre=agarre)
 
+    def bajar_hasta_contacto(self, altura_min, altura_max):
+        """Alturas en ticks SOBRE el cero de abajo. Las calcula la misión con las alturas medidas con cinta.
+        Fuera de una ventana válida no mueve nada; el extremo inferior nunca puede ser el tope de abajo."""
+        self._exigir_calibrado()
+        if not (self.cfg.altura + self.cfg.llegada_t < altura_min < altura_max < self.recorrido_util):
+            raise SinCero("ventana de contacto POR MEDIR o fuera del recorrido útil")
+        limite = self.abajo - self.signo * altura_min
+        inicio = self.abajo - self.signo * altura_max
+        if self.signo * (limite - self._pos(TORNILLO)) <= self.cfg.llegada_t:
+            raise SinCero("el tornillo ya está debajo de la ventana de contacto")
+        contacto = self._buscar_tope_abajo(limite, inicio)
+        return "contacto" if contacto is not None else "sin_contacto"
+
+    def subir_corto(self, ticks):
+        self._exigir_calibrado()
+        if not 0 < ticks < self.recorrido_util:
+            raise SinCero("subida corta POR MEDIR o fuera del recorrido")
+        destino = self._pos(TORNILLO) - self.signo * ticks
+        if self.signo * (destino - self.arriba) < 0:
+            raise SinCero("la subida corta sobrepasa la altura útil")
+        return self._mover(destino, velocidad=min(40, self.cfg.vel_busqueda), corriente_max=self.cfg.corriente_tornillo)
+
     def bajar(self):
         self._exigir_calibrado()
         return self._mover(self.agarre_t)
 
     # --- secuencia completa -----------------------------------------------------------------------------
     def recoger(self):
-        """Baja, cierra y sube con el objeto. Devuelve "agarrado" (queda arriba, sostenido) o "sin_agarre"
-        (abrió y subió vacío). Un resbalón o cualquier otra anomalía lanza AbortoSuave o AbortoDuro."""
+        """Baja a la altura segura, cierra con 200 y sube. El agarre queda POR VERIFICAR, nunca certificado."""
         self._exigir_calibrado()
         self.log("--- Bajando")
         self.bajar()
         self.log("--- Cerrando la pinza")
-        fuerza = self.cerrar_y_apretar()
-        if fuerza is None:
-            self.log(">>> SIN AGARRE: abriendo y subiendo vacío")
-            self.abrir()
-            self.subir()
-            return "sin_agarre"
+        self._cerrar_sin_juzgar(min(SOSTEN_FRUTA.values()))
         self.log("--- Subiendo con el objeto")
-        self.subir(agarre=fuerza)
+        self.subir()
         self.log(f">>> OBJETO ARRIBA: sosteniendo {self.cfg.sosten} s")
         fin = self.reloj.ahora() + self.cfg.sosten
         while self.reloj.ahora() < fin:
             self._dormir(self.cfg.periodo)
             self._vigilar()
-            if self._pos(PINZA) - fuerza > self.cfg.desliz_ticks:
-                raise AbortoSuave("El objeto se resbala mientras se sostiene")
-        return "agarrado"
+        return "por_verificar"

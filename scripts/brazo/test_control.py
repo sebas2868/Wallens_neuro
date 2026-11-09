@@ -18,10 +18,142 @@ class BaseControl(Base):
     def listo(self, **kw):
         c = self.control(**kw)
         self.assertTrue(c.calibrar().ok)
+        self.assertTrue(c.orden("bajar").ok)
         return c
 
     def torques(self):
         return self.bus.tornillo.regs[64], self.bus.pinza.regs[64]
+
+
+class TestMandarinaPendiente(BaseControl):
+    def test_sin_medida_rechaza_sin_mover_pinza(self):
+        c = self.listo()
+        c.brazo.cfg.sosten_mandarina = 0
+        pos = self.bus.pinza.pos
+        r = c.orden("cerrar:mandarina")
+        self.assertFalse(r.ok)
+        self.assertIn("POR MEDIR", r.mensaje)
+        self.assertEqual(self.bus.pinza.pos, pos)
+
+    def test_medida_configurada_se_usa_en_el_sosten(self):
+        c = self.listo()
+        c.brazo.cfg.sosten_mandarina = 200  # solo dato sintético del test
+        self.bus.pinza.objeto = OBJETO
+        r = c.orden("cerrar:mandarina")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertEqual(r.valor, "por_verificar")
+        self.assertEqual(self.bus.pinza.regs[102], 200)
+
+
+class TestPinzaNueva(BaseControl):
+    def test_sin_cero_ni_en_el_piso_se_acciona_la_pinza(self):
+        c = self.control(homing=True)
+        for calibrar in (False,True):
+            if calibrar:
+                self.assertTrue(c.calibrar().ok)
+            antes = self.bus.pinza.pos
+            for orden in ('abrir','cerrar','cerrar:limon','cerrar:mandarina','soltar','soltar:50'):
+                with self.subTest(calibrado=calibrar,orden=orden):
+                    r = c.orden(orden)
+                    self.assertFalse(r.ok,r.mensaje)
+                    self.assertEqual(self.bus.pinza.pos,antes)
+                    self.assertFalse(c.congelado)
+        self.assertTrue(c.orden('subir').ok)
+        self.assertTrue(c.orden('abrir').ok)
+
+    def test_homing_y_rearme_no_mueven_los_dedos(self):
+        c = self.control(homing=True)
+        antes = self.bus.pinza.pos
+        self.assertTrue(c.calibrar().ok)
+        self.assertEqual(self.bus.pinza.pos,antes)
+        c.congelar()
+        self.assertTrue(c.orden('rearmar').ok)
+        self.assertEqual(self.bus.pinza.pos,antes)
+        self.assertFalse(c.congelado)
+        self.assertFalse(c.orden('abrir').ok)  # rearmar no invalida el bloqueo junto al piso
+
+    def test_bajar_se_detiene_a_3200_y_deja_abrir(self):
+        c = self.listo()
+        self.assertAlmostEqual(c.brazo.abajo-self.bus.tornillo.pos,3200,delta=8)
+        self.assertTrue(c.orden('abrir').ok)
+
+    def test_tres_frutas_con_200_sin_certificar_por_posicion(self):
+        c = self.listo()
+        for tipo in ('limon','naranja','mandarina'):
+            for contacto in (3400,CIERRE_MEDIDO+17):
+                with self.subTest(tipo=tipo,contacto=contacto):
+                    self.assertTrue(c.orden('abrir').ok)
+                    self.bus.pinza.tope_max = CIERRE_MEDIDO+150
+                    self.bus.pinza.objeto = {'contacto':contacto,'rigidez':15}
+                    r = c.orden('cerrar:'+tipo)
+                    self.assertEqual((r.ok,r.valor),(True,'por_verificar'),r.mensaje)
+                    self.assertEqual(self.bus.pinza.regs[102],200)
+                    self.assertLessEqual(abs(self.bus.pinza.cur),200)
+                    self.assertTrue(c.objeto)  # posible fruta: mantener, nunca soltar por un negativo del juez
+
+    def test_vacio_tambien_es_incierto_y_no_un_falso_agarrado(self):
+        c = self.listo()
+        self.assertEqual(c.orden('cerrar:limon').valor,'por_verificar')
+        self.assertFalse(c.orden('rearmar').ok)
+
+    def test_parada_interrumpe_cierre_limitado(self):
+        c = self.listo()
+        self.assertTrue(c.orden('abrir').ok)
+        inicio = self.bus.t
+        self.bus.disparadores.append(lambda bus: c.poner_parada(True) if bus.t>inicio+.2 else None)
+        self.assertFalse(c.orden('cerrar:limon').ok)
+        self.assertTrue(c.congelado)
+
+
+class TestContactoBaldosa(BaseControl):
+    def preparado(self):
+        c = self.listo()
+        c.brazo.subir()
+        return c
+
+    def test_contacto_en_ventana_y_subida_corta_sin_empujar(self):
+        c = self.preparado()
+        self.bus.tornillo.obstaculo = c.brazo.abajo - 20000
+        r = c.orden("bajar_hasta_contacto:15000:25000")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertEqual(r.valor, "contacto")
+        pos = self.bus.tornillo.pos
+        for _ in range(20):
+            self.bus.reloj.dormir(0.05)
+            c.mantener()
+        self.assertEqual(self.bus.tornillo.pos, pos)
+        self.assertEqual(self.bus.tornillo.cur, 0)
+        self.assertTrue(c.orden("subir_corto:500").ok)
+        self.assertAlmostEqual(self.bus.tornillo.pos, pos - 500, delta=8)
+        self.assertEqual(self.bus.tornillo.encajes, 0)
+
+    def test_sin_contacto_para_en_limite_de_ventana(self):
+        c = self.preparado()
+        r = c.orden("bajar_hasta_contacto:15000:25000")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertEqual(r.valor, "sin_contacto")
+        self.assertAlmostEqual(self.bus.tornillo.pos, c.brazo.abajo - 15000, delta=8)
+        self.assertEqual(self.bus.tornillo.encajes, 0)
+
+    def test_aborto_a_mitad_no_llega_a_la_baldosa(self):
+        c = self.preparado()
+        inicio = self.bus.t
+        self.bus.disparadores.append(lambda bus: c.poner_parada(True) if bus.t > inicio + 1 else None)
+        r = c.orden("bajar_hasta_contacto:15000:25000")
+        self.assertFalse(r.ok)
+        self.assertTrue(c.congelado)
+        self.assertLess(self.bus.tornillo.pos, c.brazo.abajo - 25000)
+        self.assertEqual(self.bus.tornillo.encajes, 0)
+
+    def test_sin_ventana_y_contacto_antes_de_ventana_se_rechazan(self):
+        c = self.preparado()
+        pos = self.bus.tornillo.pos
+        for orden in ("bajar_hasta_contacto", "bajar_hasta_contacto:0:25000", "bajar_hasta_contacto:10:25000"):
+            self.assertFalse(c.orden(orden).ok)
+            self.assertEqual(self.bus.tornillo.pos, pos)
+        self.bus.tornillo.obstaculo = c.brazo.abajo - 30000
+        self.assertFalse(c.orden("bajar_hasta_contacto:15000:25000").ok)
+        self.assertEqual(self.bus.tornillo.encajes, 0)
 
 
 class TestCalibrar(BaseControl):
@@ -61,11 +193,11 @@ class TestRecoger(BaseControl):
     def test_con_objeto_agarra_y_sin_objeto_dice_sin_agarre(self):
         c = self.listo()
         c.brazo.subir()
-        self.assertEqual(c.recoger().valor, "sin_agarre")
-        self.assertFalse(c.objeto)
+        self.assertEqual(c.recoger().valor, "por_verificar")
+        self.assertTrue(c.objeto)  # posible objeto: nunca rearmar soltándolo automáticamente
         self.bus.pinza.objeto = OBJETO
         r = c.recoger()
-        self.assertEqual((r.ok, r.valor), (True, "agarrado"))
+        self.assertEqual((r.ok, r.valor), (True, "por_verificar"))
         self.assertTrue(c.objeto)
         self.assertIn("bajando", [f.lower() for f in self.fases])
 
@@ -228,7 +360,7 @@ class TestOrdenesMision(BaseControl):
         self.assertIsNotNone(c.brazo.cerrada)
         self.bus.pinza.objeto = dict(OBJETO)
         r = c.orden("cerrar:limon")
-        self.assertEqual((r.ok, r.valor), (True, "agarrado"))
+        self.assertEqual((r.ok, r.valor), (True, "por_verificar"))
         self.assertTrue(c.objeto)
         self.assertEqual(self.bus.tornillo.regs, tornillo)        # el tornillo ni se tocó
         self.assertTrue(c.orden("soltar").ok)
@@ -247,7 +379,7 @@ class TestOrdenesMision(BaseControl):
 
     def test_cerrar_con_las_ruedas_en_marcha_se_rechaza(self):
         c = self.control_pinza(quietas=False)
-        self.assertTrue(c.orden("abrir").ok)                       # abrir no pide ruedas quietas
+        self.assertFalse(c.orden("abrir").ok)                      # ni abrir permite ruedas en movimiento
         self.assertFalse(c.orden("cerrar:limon").ok)
 
     def test_sin_tornillo_bajar_y_subir_dicen_sin_ascensor(self):
@@ -255,7 +387,115 @@ class TestOrdenesMision(BaseControl):
         for o in ("bajar", "subir"):
             r = c.orden(o)
             self.assertEqual((r.ok, r.mensaje), (False, "sin ascensor"))
+        self.assertFalse(c.orden("calibrar").ok)
         self.assertFalse(c.orden("bailar").ok)
+
+
+class TestGananciasPinza(BaseControl):
+    """La pinza abierta y quieta vibraba con P800 D4000 (2026-11-03): queda con las de reposo y se mueve con las normales."""
+    def test_abierta_queda_con_ganancias_de_reposo_y_cierra_con_las_normales(self):
+        c = self.listo(homing=True)
+        cfg = Config()
+        self.assertTrue(c.orden("abrir").ok)
+        self.assertEqual((self.bus.pinza.regs[84], self.bus.pinza.regs[80]), (cfg.p_reposo_p, cfg.d_reposo_p))
+        escritas = []
+        orig = self.bus.escribir
+        self.bus.escribir = lambda i, a, n, v: (escritas.append((i, a, v)), orig(i, a, n, v))[1]
+        self.bus.pinza.objeto = dict(OBJETO)
+        self.assertEqual(c.orden("cerrar:limon").valor, "por_verificar")
+        primera_meta = next(k for k, (i, a, _) in enumerate(escritas) if i == PINZA and a == 116)
+        ganancias = [(a, v) for i, a, v in escritas[:primera_meta] if i == PINZA and a in (80, 84)]
+        self.assertEqual(sorted(ganancias), sorted([(84, cfg.p_pinza), (80, cfg.d_pinza)]))   # antes de moverla
+        self.assertTrue(c.orden("soltar").ok)
+        self.assertEqual((self.bus.pinza.regs[84], self.bus.pinza.regs[80]), (cfg.p_reposo_p, cfg.d_reposo_p))
+
+
+class TestSoltarParcial(BaseControl):
+    def test_soltar_con_ticks_abre_solo_eso_y_queda_quieta(self):
+        c = self.listo(homing=True)
+        cfg = Config()
+        self.assertTrue(c.orden("abrir").ok)
+        self.bus.pinza.objeto = dict(OBJETO)
+        self.assertEqual(c.orden("cerrar:limon").valor, "por_verificar")
+        agarre = self.bus.pinza.pos
+        r = c.orden("soltar:300")
+        self.assertEqual((r.ok, r.valor), (True, "listo"), r.mensaje)
+        # ±15: apretada, la fruta comprime los dedos unos ticks y al soltar se acomodan
+        self.assertAlmostEqual(self.bus.pinza.pos, agarre - 300, delta=15)
+        self.assertGreater(self.bus.pinza.pos, c.brazo.pos_abrir + 100)          # no se abrió del todo
+        self.assertFalse(c.objeto)
+        self.assertEqual((self.bus.pinza.regs[84], self.bus.pinza.regs[80]), (cfg.p_reposo_p, cfg.d_reposo_p))
+
+    def test_soltar_con_muchos_ticks_no_pasa_la_apertura(self):
+        c = self.listo(homing=True)
+        self.assertTrue(c.orden("cerrar").ok)
+        self.assertTrue(c.orden("soltar:5000").ok)
+        self.assertAlmostEqual(self.bus.pinza.pos, c.brazo.pos_abrir, delta=Config().llegada_p + 1)
+
+    def test_soltar_parcial_saca_del_congelado_y_rechaza_basura(self):
+        c = self.listo(homing=True)
+        self.assertTrue(c.orden("cerrar").ok)
+        c._congelar("prueba")
+        self.assertTrue(c.orden("soltar:200").ok)
+        self.assertFalse(c.congelado)
+        self.assertFalse(c.orden("soltar:mucho").ok)
+
+
+class TestOrdenesAscensor(BaseControl):
+    """Órdenes de la misión con el tornillo arreglado (2026-11-03): calibrar, subir y bajar."""
+    def test_sin_calibrar_subir_y_bajar_se_rechazan_sin_mover(self):
+        c = self.control(homing=True)
+        pos = self.bus.tornillo.pos
+        for o in ("subir", "bajar"):
+            r = c.orden(o)
+            self.assertFalse(r.ok)
+            self.assertIn("no está calibrado", r.mensaje)
+        self.assertEqual(self.bus.tornillo.pos, pos)
+
+    def test_calibrar_subir_al_tope_util_y_bajar_a_la_altura_de_agarre(self):
+        c = self.control(homing=True)
+        r = c.orden("calibrar")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertTrue(c.calibrado)
+        r = c.orden("subir")
+        self.assertEqual((r.ok, r.valor), (True, "listo"), r.mensaje)
+        self.assertLessEqual(abs(self.bus.tornillo.pos - c.brazo.arriba), Config().llegada_t)
+        r = c.orden("bajar")
+        self.assertEqual((r.ok, r.valor), (True, "listo"), r.mensaje)
+        self.assertLessEqual(abs(self.bus.tornillo.pos - c.brazo.agarre_t), Config().llegada_t)
+
+    def test_sube_con_la_fruta_sostenida_sin_tomarlo_por_un_resbalon(self):
+        # tras cerrar:limon la pinza queda con la corriente de sostén (200), menos que el umbral de resbalón de _mover
+        c = self.control(homing=True)
+        self.assertTrue(c.orden("calibrar").ok)
+        self.assertTrue(c.orden("bajar").ok)
+        self.assertTrue(c.orden("abrir").ok)
+        self.bus.pinza.objeto = dict(OBJETO)
+        self.assertEqual(c.orden("cerrar:limon").valor, "por_verificar")
+        r = c.orden("subir")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertTrue(c.objeto)
+        self.assertFalse(c.congelado)
+        self.assertTrue(c.orden("soltar").ok)
+        self.assertFalse(c.objeto)
+
+    def test_tras_morir_el_nodo_energizado_el_watchdog_disparado_no_impide_calibrar(self):
+        # fallo real (2026-11-03): el despliegue reinició el servicio con la tenaza arriba y energizada; el watchdog del
+        # tornillo se disparó y el nodo nuevo, al preparar, escribía la meta sin limpiarlo: error 4 en la dirección 116
+        c = self.control(homing=True)
+        self.assertTrue(c.orden("calibrar").ok)
+        self.assertTrue(c.orden("subir").ok)
+        for m in (self.bus.tornillo, self.bus.pinza):
+            m.disparado, m.regs[64] = True, 0                   # el motor se quedó sin noticias del nodo muerto
+        nuevo = self.control(homing=True)
+        r = nuevo.orden("calibrar")
+        self.assertTrue(r.ok, r.mensaje)
+        self.assertTrue(nuevo.orden("subir").ok)
+
+    def test_subir_con_las_ruedas_en_marcha_se_rechaza(self):
+        c = self.control(homing=True, ruedas_quietas=lambda: False)
+        self.assertFalse(c.orden("calibrar").ok)             # homing también exige ruedas quietas
+        self.assertIn("ruedas", c.orden("subir").mensaje)
 
 
 class TestReposo(BaseControl):
@@ -307,7 +547,7 @@ class TestReposo(BaseControl):
         c = self.control_pinza()
         self.assertTrue(c.orden("abrir").ok)
         self.bus.pinza.objeto = dict(OBJETO)
-        self.assertEqual(c.orden("cerrar:limon").valor, "agarrado")
+        self.assertEqual(c.orden("cerrar:limon").valor, "por_verificar")
         c.congelar()
         r = c.orden("rearmar")
         self.assertFalse(r.ok)
@@ -319,7 +559,7 @@ class TestReposo(BaseControl):
         c = self.control_pinza()
         self.assertTrue(c.orden("abrir").ok)
         self.bus.pinza.objeto = dict(OBJETO)
-        self.assertEqual(c.orden("cerrar:limon").valor, "agarrado")
+        self.assertEqual(c.orden("cerrar:limon").valor, "por_verificar")
         self.assertEqual(self.bus.pinza.regs[102], SOSTEN_FRUTA["limon"])
         for _ in range(30):                               # 3 s sosteniendo: no se escapa
             self.bus.reloj.dormir(0.1)

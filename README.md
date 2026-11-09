@@ -39,7 +39,7 @@ ruedas. Arquitectura completa, arranque y marcos TF: [docs/sistema.md](docs/sist
 | Raspberry Pi 4 (8 GB) | — | Ubuntu Server 24.04 arm64, ROS 2 Jazzy, hostname `wallens` |
 | Ruedas: 2 Dynamixel XM430-W210-R (IDs 2 y 4) | USB-RS485 Peacefair (`/dev/dynamixel`) | driver C++ en tiempo real |
 | Pinza: Dynamixel XM430-W210 (ID 5) | mismo bus | [docs/gripper-plan.md](docs/gripper-plan.md) |
-| Tornillo sin fin (ID 3) | mismo bus | **roto**: la misión va sin ascensor, [docs/tornillo.md](docs/tornillo.md) |
+| Tornillo sin fin (ID 3) | mismo bus | cambiado por uno reforzado el 2026-11-03; **cero cada vez que se prende**, ver [Tornillo](#tornillo-cada-vez-que-prendes-el-robot) y [docs/tornillo.md](docs/tornillo.md) |
 | LiDAR LDRobot STL-19P (LD19) | USB-UART | `/scan`, alimenta el freno, [docs/lidar.md](docs/lidar.md) |
 | IMU BNO055 | I²C por software | [docs/imu.md](docs/imu.md) |
 | INA226 (batería LiPo 4S) | I²C | corte a 3.4 V/celda |
@@ -51,7 +51,7 @@ ruedas. Arquitectura completa, arranque y marcos TF: [docs/sistema.md](docs/sist
 |---|---|
 | `ros/` | Paquetes ROS 2: `wallens_driver` (ruedas, odometría, bus del brazo), `wallens_imu`, `wallens_power` (batería), `wallens_safety` (freno LiDAR), `wallens_mision` (misión y detector de frutas), `wallens_nav` (SLAM + Nav2 + exploración), `wallens_interfaces` (mensajes del bus) |
 | `launch/` | `robot.launch.py` (robot base) y `mision.launch.py` (robot + brazo + detector) |
-| `scripts/` | Uso diario desde el PC (`mision.sh`, `probar.sh`, `desplegar.sh`, `pc-ros.sh`, `pi-ip.sh`), instalación de la Pi (`00`…`05`), nodo del brazo (`brazo/`), visión (`vision/`) |
+| `scripts/` | Uso diario desde el PC (`mision.sh`, `probar.sh`, `desplegar.sh`, `pc-ros.sh`, `pi-ip.sh`, `cero-tornillo.sh`), instalación de la Pi (`00`…`05`), nodo del brazo (`brazo/`), visión (`vision/`) |
 | `config/` | Red ROS (`ros-red.env`), reglas udev, EKF, versiones de la Pi buena (`versiones-pi.txt`) |
 | `systemd/` | Servicios `wallens` y `wallens-mision` y la regla de sudo |
 | `docker/` | Imagen de ROS 2 para el PC |
@@ -136,6 +136,31 @@ Los servicios y `ros-env.sh` leen `peers.env`; una shell de la Pi abierta antes 
 `pc-ros.sh` avisa al arrancar (`AVISO: el contenedor '…' usa la red del host y el dominio ROS 37 …`); pararlo con
 `docker stop <nombre>` si no es tuyo.
 
+## Tornillo: cada vez que prendes el robot
+
+Al quedarse sin energía (apagar, cambiar la batería) el motor del tornillo **pierde la cuenta de vueltas**: no sabe a qué
+altura está. Antes de usar el ascensor hay que darle el cero:
+
+```bash
+scripts/cero-tornillo.sh          # desde el PC; arranca wallens-mision si hace falta y pide Enter antes de mover
+```
+
+- **Qué hace:** abre la pinza, **baja** el tornillo despacio (~9 rpm, poca fuerza) hasta que se detiene contra el tope de
+  abajo, se despega un poco y **calcula** el de arriba sumando el recorrido medido (36037 ticks útiles, 5 % antes del
+  tope real). **El tope de arriba nunca se toca:** ahí el motor no frena y no se puede detectar por corriente.
+- **Tarda** hasta ~65 s si el carro estaba arriba del todo.
+- **Ctrl+C** mientras baja congela el brazo donde esté.
+- **Vale mientras** no se corte la energía ni se reinicie `wallens-mision`: el cero vive en el nodo del brazo. Si se
+  reinicia, se repite (la prueba de la caja también lo hace sola al empezar si el brazo no está calibrado).
+- Antes de correrlo: nada debajo del gripper y mano en el interruptor.
+
+**No usar `scripts/prueba-brazo.py --etapa=1` para esto:** su homing iba a ~20 rpm, el tope encajaba el tornillo y se
+arrancaba con fuerza; así se rompió el anterior (2026-11-01). Ahora el homing va a ~9 rpm y un test exige que nunca encaje.
+
+**Si se cambia o reajusta el mecanismo**, el recorrido se vuelve a medir a mano con `scripts/jog-tornillo.py` (paso 20,
+tope de abajo por corriente, tope de arriba a ojo) y se anota en `scripts/calibracion-tornillo.json`. Detalle, números y
+por qué no hay marca de "ya calibrado" en el motor: [docs/tornillo.md](docs/tornillo.md).
+
 ## 4. Correr la misión del limón
 
 En la Pi corre siempre uno de dos servicios, nunca los dos (`Conflicts=`, comparten el bus de los motores):
@@ -167,8 +192,8 @@ arranca `wallens-mision`, pasa el preflight y lanza la misión) y trae el regist
 
 | Etapa | Dónde va el limón | Qué hace |
 |---|---|---|
-| `agarre` | 33 cm **detrás** del centro de las ruedas, en el eje | abre, retrocede con `cam_garra`, cierra y verifica (~20 s). Prueba la pinza y mide `x_agarre`/`y_agarre` |
-| `acercar` | a menos de 1 m al frente | lo busca con `cam_frutas`, se acerca y gira 180°; sin brazo |
+| `agarre` | 33 cm **detrás** del centro de las ruedas, en el eje | calibra si falta cero, baja, abre, retrocede, agarra, mide `x_agarre`/`y_agarre` abajo y sube antes de terminar |
+| `acercar` | a menos de 1 m al frente | calibra si falta cero y cierra en vacío; busca con `cam_frutas`, se acerca y gira 180° |
 | `hasta-agarrar` | a menos de 1 m al frente | como `acercar` y luego lo agarra |
 | `completa` (por defecto) | a menos de 1 m al frente | lo agarra, lo deja 0.75 m detrás de donde arrancó y se aparta |
 
@@ -180,6 +205,48 @@ MAS="-p w_max:=0.45" scripts/probar.sh acercar
 
 Si el preflight falla dice qué falta y **no mueve nada**. Una misión que agarra bien guarda la calibración del agarre
 en la Pi (`~/.config/wallens/agarre.yaml`) y las siguientes la cargan solas; `X_AGARRE=… Y_AGARRE=…` la fuerzan.
+
+**B4 (2026-11-03), pendiente de validar en el robot:** `usar_tornillo=true` por defecto en la misión. El homing
+(`calibrar`) puede tardar ~65 s desde arriba y tiene un límite de 90 s; abre la pinza, así que se empieza sin fruta
+agarrada. `subir` tarda ~25 s. Las ruedas esperan el resultado y el estado de brazo libre; un fallo deja el robot
+quieto y no ordena soltar. `MAS="-p usar_tornillo:=false"` permite probar el comportamiento anterior sin ascensor.
+
+La líder corre `scripts/probar.sh agarre` **5 veces, una por una**, con la mano en el interruptor y el limón a 33 cm
+detrás del eje. Comprueba: calibra solo cuando falta cero, baja antes de abrir, agarra y sube; las ruedas quedan
+quietas durante cada orden del brazo. Al finalizar, observa **30 s sosteniendo arriba**, sin sobrecarga ni caída.
+Retira la fruta antes de repetir. `probar.sh` despliega el árbol completo: coordinar el árbol compartido antes de
+ejecutarlo. Las alturas para baldosa quedaron medidas el 4 de noviembre; falta validar el contacto real.
+
+### Misión automática: pedido, caja o baldosa
+
+La integración del 3 de noviembre añade reconocimiento, mapa de objetos, pregunta del final, entrega en caja o
+baldosa y vuelta a esperar otro pedido. La prueba física está pendiente: seguir primero
+[las pruebas de mañana, en orden](docs/pruebas-manana.md) y la [actualización del 4 de noviembre](docs/resultados-20261104.md).
+La pinza nueva agarra a 3200 ticks y sostiene las tres frutas con 200. Su posición **no distingue vacío de fruta**:
+el cierre devuelve `por_verificar`; falta medir la región visual de la fruta subida antes de autorizar transporte.
+
+En la Pi, con `wallens-mision` disponible y las medidas configuradas:
+
+```bash
+source ~/wallens/scripts/ros-env.sh
+ros2 run wallens_mision mision_frutas.py --ros-args --params-file ~/wallens/config/mision_automatica.yaml
+```
+
+Espera `/mision/pedido` (voz o publicación manual); después de recoger y subir pregunta en `/mision/estado`:
+
+```bash
+ros2 topic pub /mision/pedido std_msgs/msg/String '{data: limon}' -r 5 --times 10
+# Solo después de ver «¿caja o baldosa?»:
+ros2 topic pub /mision/final std_msgs/msg/String '{data: caja}' -r 5 --times 10
+```
+
+`config/frutas.yaml` contiene referencias y medidas del detector; `config/mision_automatica.yaml`, las de la misión.
+Marco 0.072 m, diámetros 0.050/0.070/0.074 m, alturas por fruta y frente de caja 3.3 cm ya están configurados.
+Las cajas turquesa se localizan con cámara y láser; se visitan para leer la tarjeta a 0.7 m, con un reintento a 0.6 m.
+`agarre_arriba_x/y` siguen **POR MEDIR**: el cierre incierto se sostiene quieto y no autoriza el traslado.
+`IR_A_ENTREGA/DEJAR` permanece como plan B, con `esperar_pedido=false` y `automatico=false`.
+La navegación no integra Nav2. La cámara sigue siendo propiedad exclusiva de `detector_frutas`, también al grabar
+fotos con `scripts/vision/camara.py grabar`.
 
 ### Parar y volver al robot normal
 

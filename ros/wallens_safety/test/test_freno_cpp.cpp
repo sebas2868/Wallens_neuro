@@ -178,9 +178,11 @@ static void caso_freno(const J& c, const std::string& ctx) {
     hz = p["horizonte_giro"].num();
     rg = p["retencion_giro"].num();
   }
+  double ct_caja = p.o.count("caja_timeout") ? p["caja_timeout"].num() : 1.0;
+  double v_caja = p.o.count("v_caja") ? p["v_caja"].num() : 0.03;
   Freno f(p["dist"].num(), p["semiancho"].num(), p["yaw"].num(), p["minimo"].num(), p["scan_timeout"].num(),
           p["requiere_scan"].b, p["cmd_timeout"].num(), p["histeresis"].num(), static_cast<int>(p["min_lecturas"].num()),
-          huella, laser_x, ml, mg, hz, rg);
+          huella, laser_x, ml, mg, hz, rg, ct_caja, v_caja);
   std::vector<std::vector<double>> scans;
   for (const auto& s : c["scans"].a) scans.push_back(nums(s["rangos"]));
   std::size_t k = 0;
@@ -197,6 +199,8 @@ static void caso_freno(const J& c, const std::string& ctx) {
       EXPECT_EQ(f.puntos.size(), static_cast<std::size_t>(op["np"].num())) << cx;
     } else if (o == "cmd") {
       EXPECT_EQ(f.on_cmd(op["v"].num(), op["w"].num(), op["t"].num()), op["ok"].b) << cx;
+    } else if (o == "caja") {
+      EXPECT_EQ(f.on_modo_caja(op["d"].num(), op["t"].num()), op["ok"].b) << cx;
     } else {
       auto r = f.ciclo(op["t"].num());
       ASSERT_EQ(r.has_value(), !op["r"].nulo()) << cx;

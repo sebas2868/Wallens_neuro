@@ -32,26 +32,32 @@ DIAMETRO = {"limon": 0.049, "naranja": 0.061}
 
 
 def grabar(camara, segundos, descartar=5):
+    """Pide cuadros al único dueño de la cámara, detector_frutas (depuracion=true). Sin misión activa."""
+    import subprocess
     destino = os.path.expanduser(time.strftime(f"~/.cache/wallens/grabaciones/{camara}-%Y%m%d-%H%M%S"))
     os.makedirs(destino)
-    c = cv2.VideoCapture(DISPOSITIVOS[camara], cv2.CAP_V4L2)
-    if not c.isOpened():
-        raise SystemExit(f"No puedo abrir {DISPOSITIVOS[camara]}: ¿la tiene detector_frutas? (publicar camara \"\")")
-    c.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*FORMATOS[camara]))
-    c.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    c.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    c.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    for _ in range(descartar):
-        c.grab()
+    def pedir(modo):
+        subprocess.run(["ros2", "topic", "pub", "/camara", "std_msgs/msg/String", json.dumps({"data":modo}),
+                        "-r", "5", "--times", "10"], check=True, stdout=subprocess.DEVNULL, timeout=15)
+    desde = time.time()
+    pedir(camara)
+    fuente = os.path.expanduser(f"~/.cache/wallens/detector/{camara}-cruda.jpg")
     tiempos, t0, n = [], time.monotonic(), 0
-    while time.monotonic() - t0 < segundos:
-        ok, f = c.read()
-        if not ok:
-            continue
-        cv2.imwrite(os.path.join(destino, f"{n:04d}.jpg"), f, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        tiempos.append(round(time.monotonic() - t0, 3))
-        n += 1
-    c.release()
+    ultima = desde
+    try:
+        while time.monotonic() - t0 < segundos:
+            if os.path.isfile(fuente) and os.path.getmtime(fuente) > ultima:
+                ultima = os.path.getmtime(fuente)
+                f = cv2.imread(fuente)
+                if f is not None:
+                    cv2.imwrite(os.path.join(destino, f"{n:04d}.jpg"), f)
+                    tiempos.append(round(time.monotonic()-t0,3))
+                    n += 1
+            time.sleep(0.1)
+    finally:
+        pedir("")
+    if not n:
+        raise SystemExit("Sin cuadros nuevos: revisar detector_frutas y depuracion:=true; ninguna cámara se abrió aquí")
     with open(os.path.join(destino, "tiempos.json"), "w") as f:
         json.dump({"camara": camara, "tiempos": tiempos}, f)
     print(f"{n} cuadros en {segundos} s ({n / segundos:.1f} Hz) -> {destino}")
@@ -171,22 +177,47 @@ def evaluar(directorio, u, nombre="", guardar=True):
     return vistos / n
 
 
+def evaluar_actual(directorio, modo, tipo):
+    """Ejecuta el mismo binario C++ instalado; ninguna cámara abierta. Exige >=95% y cuenta falsas clases."""
+    import subprocess
+    config = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config", "frutas.yaml"))
+    r = subprocess.run(["ros2", "run", "wallens_mision", "detector_frutas", "--evaluar", os.path.expanduser(directorio),
+                        "--modo", modo, "--ros-args", "--params-file", config], capture_output=True, text=True, check=True)
+    resultados = []
+    esperados = {"limon", "naranja", "mandarina"} if tipo == "todas" else (set() if tipo == "ninguna" else {tipo})
+    for linea in r.stdout.splitlines():
+        if "\t{" not in linea:
+            continue
+        ruta, texto = linea.split("\t", 1)
+        d = json.loads(texto)
+        tipos = {f["tipo"] for f in d[modo]}
+        resultados.append((ruta, tipos == esperados, sorted(tipos)))
+    bien = sum(b for _, b, _ in resultados)
+    total = len(resultados)
+    print(json.dumps({"modo":modo,"esperadas":sorted(esperados),"bien":bien,"total":total,
+                      "porcentaje":100*bien/total if total else 0,"errores":[r for r in resultados if not r[1]]},ensure_ascii=False,indent=2))
+    return total > 0 and bien/total >= 0.95
+
+
 def main():
     a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = a.add_subparsers(dest="accion", required=True)
     g = sub.add_parser("grabar")
-    g.add_argument("--camara", choices=DISPOSITIVOS, default="garra")
+    g.add_argument("--camara", choices=("frutas", "garra", "cajas", "baldosas"), default="garra")
     g.add_argument("--segundos", type=float, default=20.0)
     e = sub.add_parser("evaluar")
     e.add_argument("directorio")
     e.add_argument("--comparar", action="store_true")
+    e.add_argument("--tipo", choices=("limon", "naranja", "mandarina", "todas", "ninguna"))
+    e.add_argument("--modo", choices=("frutas", "cajas", "baldosas"), default="frutas")
     for k, v in UMBRALES.items():
         e.add_argument("--" + k.replace("_", "-"), type=type(v), default=v)
     args = a.parse_args()
     if args.accion == "grabar":
-        d = grabar(args.camara, args.segundos)
-        evaluar(d, UMBRALES)
+        grabar(args.camara, args.segundos)
         return
+    if args.tipo:
+        raise SystemExit(0 if evaluar_actual(args.directorio,args.modo,args.tipo) else 1)
     u = {k: getattr(args, k) for k in UMBRALES}
     if args.comparar:
         evaluar(args.directorio, dict(UMBRALES, s_min=70, v_min=50), "-antes")

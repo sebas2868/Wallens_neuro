@@ -2,6 +2,21 @@
 
 Acordado el 2026-11-01. Tornillo sin fin = ID 3 (sube y baja), gripper = ID 5. Detalle del tornillo en [tornillo.md](tornillo.md).
 
+## Gripper nuevo (cambiado el 2026-11-03)
+
+- **Recorrido**, medido a mano con el torque apagado (`mirar_pinza.py`, solo lectura): abierto del todo **2866**, dedos
+  tocándose **3811**. El viejo era 2794 / 3851. Ya está en `scripts/brazo/brazo.py` (`ABIERTA`, `CERRADA`), con
+  `CIERRE_MEDIDO` = 3811 provisional hasta que lo mida G0. `APRIETE_FRUTA` y `SOSTEN_FRUTA` siguen siendo **del viejo**
+  hasta repetir la fase G (`scripts/prueba-pinza-frutas.py`).
+- **REGLA: antes de mover la pinza, la tenaza va despegada del piso.** Los dedos nuevos llegan más abajo: con la tenaza
+  en el tope de abajo rozan el piso, la pinza se frena y el brazo aborta ("los dedos se detuvieron lejos del cierre" o
+  "corriente de la pinza > 100: algo la frena") sin nada entre los dedos. `prueba-pinza-frutas.py` sube el tornillo de
+  a 300 ticks hasta que digas que pasa una hoja por debajo y guarda cuánto subió (`despegue_ticks`). Ese número es el
+  que hay que sumarle a la altura de agarre de la misión (`Config.altura`, hoy 40 ticks sobre el tope de abajo).
+- **Más fuerza para abrir:** con 120 (~320 mA) y aborto en 100, el nuevo se frenaba al abrir. La prueba usa
+  `--corriente-abrir=200` (aborto en 180). Si la misión también lo necesita, hay que subir `corriente_pinza` y
+  `corriente_aborto_p` en `Config`.
+
 ## Por qué este plan
 
 Las primeras pruebas combinadas fallaron cuatro veces seguidas por código que nunca se había ejecutado: la aceleración
@@ -39,6 +54,13 @@ se escribe una meta nueva (`cerrar_y_apretar()` ya lo hace). Está en `Brazo.abr
 - **2026-11-02:** el usuario vio que con B la pinza abierta sigue oscilando. Se adopta la **C**: tras congelar la meta,
   `abrir()` baja la corriente a `corriente_reposo_p` = 30 (~80 mA); cualquier movimiento nuevo vuelve a escribir su corriente.
   Se verifica en la prueba de la fase G (`scripts/prueba-pinza-frutas.py`, pregunta de G1).
+- **2026-11-03:** con C sigue vibrando (medido: 12-16 ticks de pico a pico, ~10 Hz, corriente ~17; suelta, sin torque,
+  la pinza queda 15-20 ticks más abierta: es el juego más la tensión de los dedos). La D no lo arregla (D=0: 28 ticks);
+  lo que lo quita es bajar la P **solo en reposo**: `abrir()` deja **P120 D300** (Position P/D Gain, registros 84/80,
+  RAM) y cualquier movimiento de la pinza vuelve primero a las normales **P800 D4000** (las del motor, con las que se
+  probó el agarre). P120 D300: 1 tick (ruido del encoder) en 5 de 5; P200 D300 al límite (2 de 4 oscilaron 6-7 ticks).
+  Con el tornillo moviéndose (vel 40 y 100) la pinza no vibra. Repetir la medida: `scripts/diagnostico-ganancias-pinza.py`.
+  El driver permite ahora 80-81 y 84-85 en la lista blanca del bus del brazo.
 
 ## Cierre medido (2026-11-02)
 

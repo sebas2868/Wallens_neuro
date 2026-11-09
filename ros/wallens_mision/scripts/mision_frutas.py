@@ -9,7 +9,7 @@ abre detector_frutas: una a la vez, "" = ninguna) y, en un fallo, parada. Con Ct
 Parámetros: zona_x, zona_y, radio, frutas ("limon,naranja"), entrega_x, entrega_y, angulo_linea, separacion,
 volver_home, desde, hasta (estados de SECUENCIA, "" = sin límite), hz, relativo: true (por defecto) = zona, entrega y
 línea respecto al robot al lanzar la misión (entrega 0, 0 = donde está); false = en odom. Además cada campo numérico
-de mision_logica.Config con su nombre (x_agarre, v_max, w_max, tol_agarre_x...): se ajustan sin tocar código.
+de mision_logica.Config con su nombre (x_agarre, v_max, w_max, tol_agarre_x...), y usar_tornillo (true por defecto).
 Calibración: si VERIFICAR vio la fruta agarrada en >= 5 cuadros, al terminar bien guarda x_agarre/y_agarre en
 ~/.config/wallens/agarre.yaml (formato --params-file); scripts/probar-mision.sh lo carga en la siguiente misión.
 Ejemplo, recoger el limón que está 1.2 m al frente y dejarlo donde arrancó (lo que hace scripts/probar-mision.sh):
@@ -19,6 +19,8 @@ import math
 import os
 import sys
 import time
+from collections import deque
+from statistics import median
 from dataclasses import fields
 
 import rclpy
@@ -26,14 +28,14 @@ from rclpy.executors import ExternalShutdownException
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.signals import SignalHandlerOptions
-from sensor_msgs.msg import BatteryState
-from std_msgs.msg import Bool, String
+from sensor_msgs.msg import BatteryState, LaserScan
+from std_msgs.msg import Bool, String, Float32
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mision_logica import Config, Mision, Pedido, ordenes_al_salir, pedido_relativo  # noqa: E402
+from mision_logica import BuzonPedidos, Config, Mision, Pedido, ordenes_al_salir, pedido_relativo  # noqa: E402
 
 from wallens_interfaces.msg import EstadoBrazo  # noqa: E402
 
@@ -49,10 +51,18 @@ class NodoMision(Node):
                         frutas=[f.strip() for f in p("frutas", "limon").split(",") if f.strip()],
                         entrega=(p("entrega_x", 0.0), p("entrega_y", 0.0)), angulo_linea=p("angulo_linea", 0.0),
                         separacion=p("separacion", 0.25), volver_home=p("volver_home", False))
-        cfg = Config(**{c.name: p(c.name, c.default) for c in fields(Config) if type(c.default) in (int, float)})
         desde, hasta = p("desde", "") or None, p("hasta", "") or None
+        self.esperar_pedido = p("esperar_pedido", not (desde or hasta))
+        inicial = Config(automatico=self.esperar_pedido, reconocer=self.esperar_pedido)
+        cfg = Config(**{c.name: p(c.name, getattr(inicial, c.name)) for c in fields(Config)
+                        if type(c.default) in (bool, int, float, str)})
+        self.plantilla, self.cfg = pedido, cfg
+        self.buzon, self.ultima_pose = BuzonPedidos(), None
+        self.relativo = p("relativo", True)
         Mision(pedido, cfg, desde=desde, hasta=hasta)            # valida el pedido ya, antes de esperar la pose
-        if p("relativo", True):                                  # se crea con la primera pose (_al_odom)
+        if self.esperar_pedido:
+            self.mision = None
+        elif self.relativo:                                  # se crea con la primera pose (_al_odom)
             self.mision, self.crear = None, lambda pose: Mision(pedido_relativo(pedido, pose), cfg, desde, hasta)
         else:
             self.mision = Mision(pedido, cfg, desde=desde, hasta=hasta)
@@ -67,6 +77,18 @@ class NodoMision(Node):
         self.pub_orden = self.create_publisher(String, "brazo/orden", 10)
         self.pub_parada = self.create_publisher(Bool, "parada", transitoria)
         self.pub_camara = self.create_publisher(String, "camara", transitoria)
+        self.pub_estado = self.create_publisher(String, "mision/estado", transitoria)
+        self.pub_caja = self.create_publisher(Float32, "freno/modo_caja", 10)
+        self.create_subscription(String, "mision/final", self._al_final, transitoria)
+        self.create_subscription(String, "mision/pedido", self._al_pedido, transitoria)
+        # ros2 topic pub sin opciones ofrece durabilidad volátil. Mantener ambas compatibilidades;
+        # BuzonPedidos filtra el duplicado si el emisor ofrece entrega del último mensaje.
+        self.create_subscription(String, "mision/final", self._al_final, 10)
+        self.create_subscription(String, "mision/pedido", self._al_pedido, 10)
+        self.create_subscription(String, "cajas/detecciones", lambda m: self._al_objetos("caja", m), 5)
+        self.create_subscription(String, "baldosas/detecciones", lambda m: self._al_objetos("baldosa", m), 5)
+        self.create_subscription(LaserScan, "scan", self._al_scan, qos_profile_sensor_data)
+        self.vueltas_laser, self.sello_laser = deque(maxlen=5), None
         self.create_subscription(Odometry, "odometry/filtered", self._al_odom, 10)
         self.create_subscription(EstadoBrazo, "brazo/estado", self._al_brazo, 10)
         self.create_subscription(String, "brazo/resultado", self._al_resultado, 10)
@@ -87,11 +109,59 @@ class NodoMision(Node):
     def t():
         return time.monotonic()
 
+    def _al_final(self, msg):
+        if self.mision is not None:
+            self.mision.on_final(msg.data)
+
+    def _al_pedido(self, msg):
+        if self.esperar_pedido:
+            aceptado = self.buzon.recibir(msg.data, self.t(), self.mision is not None or self.parada)
+            if not aceptado and self.mision is None:
+                self.pub_estado.publish(String(data="ESPERAR_PEDIDO: fruta inválida, repetida o /parada activa"))
+
+    def _al_objetos(self, clase, msg):
+        if self.mision is None:
+            return
+        modo = "cajas" if clase == "caja" else "baldosas"
+        if self.camara == modo:
+            try:
+                self.mision.on_objetos(clase, json.loads(msg.data)[modo], self.t())
+            except (ValueError, KeyError, TypeError):
+                self.get_logger().warning(f"mensaje inválido en {modo}/detecciones")
+
+    def _al_scan(self, msg):
+        sello = (msg.header.stamp.sec, msg.header.stamp.nanosec)
+        if sello == self.sello_laser:
+            return
+        self.sello_laser = sello
+        puntos = []
+        frente = []
+        for i, d in enumerate(msg.ranges):
+            if not math.isfinite(d) or not max(msg.range_min, 0.06) <= d <= msg.range_max:
+                continue
+            # Misma transformación medida que scripts/prueba-caja.py.
+            a = msg.angle_min + i * msg.angle_increment - math.pi / 2
+            x, y = 0.089 + d * math.cos(a), d * math.sin(a)
+            if x > 0.10:
+                frente.append((x,y))
+            if x < -0.12 and abs(y) <= 0.10:
+                puntos.append(-x)
+        if len(puntos) < 5:
+            self.vueltas_laser.clear()
+        else:
+            self.vueltas_laser.append(median(sorted(puntos)[:5]) - 0.285)
+        if self.mision is not None:
+            self.mision.on_lidar_frente(frente, self.t())
+            self.mision.on_lidar_atras(median(self.vueltas_laser) if len(self.vueltas_laser) == 5 else None, self.t())
+
     def _al_odom(self, m):
         q = m.pose.pose.orientation
         th = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
         x, y = m.pose.pose.position.x, m.pose.pose.position.y
+        self.ultima_pose = (x, y, th)
         if self.mision is None:
+            if self.esperar_pedido:
+                return
             self.mision = self.crear((x, y, th))
             self.get_logger().info(f"pedido en odom (relativo a x={x:.3f} y={y:.3f} th={math.degrees(th):.1f}°): "
                                    f"{self.mision.p}")
@@ -168,7 +238,10 @@ class NodoMision(Node):
         if self.camara == "garra":
             d = json.loads(m.data)
             self.get_logger().info(f"cam_garra: {d}", throttle_duration_sec=1.0)
-            self.mision.on_garra(d["visible"], d["x"], d["y"], self.t())
+            if 'candidatas' in d:
+                self.mision.on_garra_candidatas(d['candidatas'], self.t())
+            else:
+                self.mision.on_garra(d["visible"], d["x"], d["y"], self.t())
 
     def _poner_camara(self, camara):
         if camara != self.camara:
@@ -179,10 +252,19 @@ class NodoMision(Node):
         if self.salir:
             return
         if self.mision is None:
+            if self.esperar_pedido:
+                self.pub_cmd.publish(Twist())
+                self.pub_caja.publish(Float32(data=-1.0))
+                self._poner_camara(None)
+                self.mision = self.buzon.crear(self.plantilla, self.cfg, self.ultima_pose, self.relativo)
+                self.pub_estado.publish(String(data="INICIO" if self.mision else "ESPERAR_PEDIDO"))
+                return
             self.get_logger().warn("esperando /odometry/filtered para situar el pedido", throttle_duration_sec=5.0)
             return
         self.mision.on_parada(self.parada)
         s = self.mision.paso(self.t())
+        self.pub_caja.publish(Float32(data=float(s.modo_caja)))
+        self.pub_estado.publish(String(data=s.aviso or s.estado))
         if s.estado != self.estado_log:
             self.estado_log = s.estado
             self.get_logger().info(f"--- {s.estado}")
@@ -209,7 +291,11 @@ class NodoMision(Node):
                                        f"(configurado x_agarre={self.mision.cfg.x_agarre} y_agarre={self.mision.cfg.y_agarre})")
                 if s.fin[0] == "fin" and len(self.mision.vistas_agarre) >= 5:
                     self.get_logger().info(f"calibración guardada en {guardar_agarre(x, y)}: la próxima misión la usa")
-            self.salir = True
+            if self.esperar_pedido and s.fin[0] == "fin":
+                self.mision = None
+                self.pub_estado.publish(String(data="ESPERAR_PEDIDO"))
+            else:
+                self.salir = True
 
 
 AGARRE = os.path.expanduser("~/.config/wallens/agarre.yaml")

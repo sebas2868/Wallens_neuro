@@ -12,3 +12,6 @@ wallens_imu:
     # `completa` deja ver el yaw del IMU para compararlo con el del EKF.
     lectura: completa
     max_rate: 5.0               # rad/s; en modo giro, un eje por encima de esto es un bloque corrupto y se descarta
+    # Escala del giroscopio en z (yaw): 2026-11-04, giro de 360° (cinta y ruedas ≈ 349.9°, BNO055 marcó 360.4°) ⇒
+    # 349.9 / 360.4. El EKF usa esta velocidad angular para el rumbo: sin ella los giros quedan ~3 % cortos.
+    escala_giro_z: 0.971

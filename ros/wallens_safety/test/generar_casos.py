@@ -195,6 +195,10 @@ class Secuencia:
         ok = self.f.on_cmd(v, w, t)
         self.caso["ops"].append({"op": "cmd", "t": t, "v": v, "w": w, "ok": ok})
 
+    def caja(self, t, d):
+        ok = self.f.on_modo_caja(d, t)
+        self.caso["ops"].append({"op": "caja", "t": t, "d": d, "ok": ok})
+
     def ciclo(self, t):
         r = self.f.ciclo(t)
         self.caso["ops"].append({"op": "ciclo", "t": t, "r": None if r is None else list(r),
@@ -420,6 +424,77 @@ for k in range(40):
         ops.append((rnd.choice(["scan", "rev", "rev", "rev"]), t))
     caso_vig(f"vigilante fuzz {k}", perd, esp, ini, ops)
 
+
+# 8) modo caja (2026-11-03): marcha atrás hasta dist_caja de la pared del fondo, a lo sumo v_caja, y vence solo.
+#    Sin rnd: no cambia los casos de arriba.
+PARAMS_CAJA = dict(PARAMS_HUELLA, caja_timeout=1.0, v_caja=0.03)
+
+
+def correr_caja(s, v, w, t0, t1, rangos, d_caja, renovar=0.2, paso=1 / 30):
+    s.cmd(t0, v, w)
+    t, t_ren = t0, -math.inf
+    while t < t1:
+        if d_caja is not None and t - t_ren >= renovar:
+            s.caja(t, d_caja)
+            t_ren = t
+        s.scan(t, rangos)
+        if t > t0 and int((t - t0) / 0.1) != int((t - paso - t0) / 0.1):
+            s.cmd(t, v, w)
+        s.ciclo(t)
+        t += paso
+
+
+for huella in (HUELLAS[0], None):
+    base = PARAMS_CAJA if huella else dict(PARAMS_BASE, caja_timeout=1.0, v_caja=0.03)
+    for v in (-0.05, -0.02, -0.3, 0.05):
+        for d in (0.005, 0.015, 0.02, 0.0201, 0.03, 0.06, 0.10, 0.14, 0.2, 0.5):
+            s = Secuencia(f"caja huella={bool(huella)} v={v} d={d}", base, huella)
+            if huella:
+                x = (0.148 + d) if v > 0 else -(0.281 + d)
+                rg = scan_puntos(450, [(x, 0.0)])
+            else:
+                rg = scan_conos(450, frente=d if v > 0 else 3.0, atras=d if v < 0 else 3.0)
+            correr_caja(s, v, 0.0, 10.0, 10.3, rg, 0.02)
+            s.fin()
+    # vence: un solo pedido y luego más de caja_timeout s
+    for d_obj in (0.05, 0.5):
+        s = Secuencia(f"caja vence huella={bool(huella)} d={d_obj}", base, huella)
+        rg = scan_puntos(450, [(-(0.281 + d_obj), 0.0)]) if huella else scan_conos(450, atras=d_obj)
+        s.caja(10.0, 0.02)
+        correr(s, -0.05, 0.0, 10.0, 11.5, rg)
+        s.fin()
+    # apagado explícito y pedidos no válidos
+    for malo in (-1.0, NAN, INF, -INF, -0.0, 0.0):
+        s = Secuencia(f"caja apagar huella={bool(huella)} d={malo}", base, huella)
+        rg = scan_puntos(450, [(-(0.281 + 0.05), 0.0)]) if huella else scan_conos(450, atras=0.05)
+        s.caja(10.0, 0.02)
+        s.cmd(10.0, -0.05, 0.0)
+        s.scan(10.0, rg)
+        s.ciclo(10.0)
+        s.caja(10.1, malo)
+        s.cmd(10.1, -0.05, 0.0)
+        s.ciclo(10.1)
+        s.fin()
+    # histéresis dentro del modo caja
+    s = Secuencia(f"caja histeresis huella={bool(huella)}", base, huella)
+    t = 10.0
+    for d in (0.03, 0.019, 0.025, 0.05, 0.069, 0.071, 0.015, 0.08):
+        rg = scan_puntos(450, [(-(0.281 + d), 0.0)]) if huella else scan_conos(450, atras=d)
+        s.caja(t, 0.02)
+        s.cmd(t, -0.05, 0.0)
+        s.scan(t, rg)
+        s.ciclo(t)
+        t += 0.03
+    s.fin()
+    # el giro no cambia con el modo caja
+    if huella:
+        for w in (0.3, -0.3):
+            s = Secuencia(f"caja giro w={w}", base, huella)
+            correr_caja(s, 0.0, w, 10.0, 10.3, scan_puntos(450, [(-0.30, 0.06), (-0.30, -0.06)]), 0.02)
+            s.fin()
+            s = Secuencia(f"caja giro y reversa w={w}", base, huella)
+            correr_caja(s, -0.05, w, 10.0, 10.3, scan_puntos(450, [(-0.30, 0.06), (-0.30, -0.06)]), 0.02)
+            s.fin()
 
 # ---------------------------------------------------------------- salida
 with open(os.path.join(AQUI, "casos_freno.json"), "w") as f:

@@ -6,6 +6,9 @@ gripper) incluyendo los fallos que ya aparecieron en el banco:
     hasta escribir 0 en el watchdog.
   - El tornillo choca con topes duros; si llega al tope a más de 60 de velocidad se encaja y solo se despega
     con Goal Current >= 250.
+  - Perfil que sigue "bajando" (2026-11-03): frenado contra el tope de abajo, el perfil del motor sigue avanzando; al
+    escribir una meta nueva sigue empujando hacia abajo un rato (INERCIA_S). Si en ese rato la corriente sube a 250, lo
+    empuja contra la base y lo encaja. Apagar y prender el torque reinicia el perfil.
   - El gripper puede tener un objeto elástico (contacto + rigidez) que se puede hacer resbalar.
 El reloj es falso: dormir() avanza la simulación, así que los tests no esperan tiempo real."""
 from .bus import ErrorBus
@@ -14,6 +17,9 @@ TICKS_POR_UNIDAD = 0.229 * 4096 / 60      # ticks/s por unidad de Profile Veloci
 COM = 0.002                               # s que cuesta cada transacción del bus
 ENCAJE_VEL = 60                           # velocidad de perfil sobre la cual el tope encaja el tornillo
 ENCAJE_CORRIENTE = 250                    # corriente mínima para despegar un tornillo encajado
+INERCIA_S = 0.5                           # s que el perfil sigue empujando abajo tras una meta nueva frenado en el tope
+EMPUJE_MIN = 1.0                          # s frenado para que el perfil quede adelantado (el homing tarda >= 1 s en darlo
+                                          # por tope; el jog, 0.6 s y sin fallo visto)
 
 
 class Motor:
@@ -27,7 +33,11 @@ class Motor:
         self.disparado = False                 # watchdog disparado
         self.ultima_com = 0.0
         self.encajado = False
-        self.objeto = None                     # {"contacto": ticks, "rigidez": corriente por tick[, "kp": control P]}
+        self.encajes = 0                       # veces que el tope encajó el tornillo (cada una lo fuerza)
+        self.empuje = 0.0                      # s frenado contra el tope de abajo con la meta más allá
+        self.inercia = 0.0                     # s que el perfil aún empuja abajo tras una meta nueva
+        self.objeto = None                    # {"contacto": ticks, "rigidez": corriente por tick[, "kp": control P]}
+        self.obstaculo = None                 # baldosa: tope adicional del tornillo en ticks, sin cambiar su cero
         self.min_visto = self.max_visto = float(pos)
 
     def avanzar(self, dt, t):
@@ -36,6 +46,14 @@ class Motor:
             self.disparado, r[64] = True, 0
         if not r[64]:
             self.cur = 0
+            self.empuje = self.inercia = 0.0
+            return
+        if self.inercia > 0 and self.tope_max is not None and self.pos >= self.tope_max:
+            self.inercia -= dt
+            if r[102] >= ENCAJE_CORRIENTE:
+                self.encajes += 0 if self.encajado else 1
+                self.encajado = True
+            self.cur = r[102]
             return
         vel = r[112] * TICKS_POR_UNIDAD if r[112] else 4000
         meta, limite_c = r[116], r[102]
@@ -49,10 +67,17 @@ class Motor:
                 nuevo, bloqueado = self.pos, meta != self.pos
         if self.tope_max is not None and nuevo >= self.tope_max:
             if meta > self.tope_max and r[112] > ENCAJE_VEL:
+                self.encajes += 0 if self.encajado else 1
                 self.encajado = True
             nuevo, bloqueado = self.tope_max, meta > self.tope_max
+        self.empuje = self.empuje + dt if self.tope_max is not None and nuevo >= self.tope_max and meta > nuevo else 0.0
         if self.tope_min is not None and nuevo <= self.tope_min:
             nuevo, bloqueado = self.tope_min, meta < self.tope_min
+        if self.obstaculo is not None and nuevo >= self.obstaculo:
+            if meta > self.obstaculo and r[112] > ENCAJE_VEL:
+                self.encajes += 0 if self.encajado else 1
+                self.encajado = True
+            nuevo, bloqueado = self.obstaculo, meta > self.obstaculo
         cur = 25 if paso > 0 and not bloqueado else 0
         if bloqueado:
             cur = limite_c
@@ -85,11 +110,13 @@ class RelojFalso:
 
 
 class BusFalso:
-    def __init__(self, tornillo_pos=28555, pinza_pos=2907, tope_abajo=38007, tope_arriba=-14000):
+    # gripper NUEVO (2026-11-03): a mano abre hasta 2866 y los dedos se tocan en 3811. El falso los junta 10 ticks más
+    # allá (con el viejo: tope 3900, medir_cierre real 3890) y arranca 6 ticks más cerrado que la apertura (2967)
+    def __init__(self, tornillo_pos=28555, pinza_pos=2973, tope_abajo=38007, tope_arriba=-14000):
         self.t = 0.0
         self.motores = {
             3: Motor(3, tornillo_pos, tope_min=tope_arriba, tope_max=tope_abajo),
-            5: Motor(5, pinza_pos, tope_min=2700, tope_max=3900),
+            5: Motor(5, pinza_pos, tope_min=2772, tope_max=3821),
         }
         self.tope_abajo = tope_abajo
         self.disparadores = []                 # funciones(bus) que corren en cada paso
@@ -181,10 +208,18 @@ class BusFalso:
             raise ErrorBus(f"ID {i}: fallo escribiendo {addr}={v} (res=0, err=7)")
         if addr == 108 and v > m.regs[112]:
             raise ErrorBus(f"ID {i}: fallo escribiendo {addr}={v} (res=0, err=4)")
+        # como el XM430 real (2026-11-03): con el Bus Watchdog disparado rechaza las metas y el perfil con error 4
+        # (rango) hasta escribir 0 en el watchdog (en el tornillo real lo rechazó escribiendo 112 = 40)
+        if addr in (100, 102, 104, 108, 112, 116) and m.disparado:
+            raise ErrorBus(f"ID {i}: fallo escribiendo {addr}={v} (res=0, err=4)")
         if addr == 64 and v and m.disparado:
             raise ErrorBus(f"ID {i}: fallo escribiendo {addr}={v} (res=0, err=1)")
         if addr == 98 and v == 0:
             m.disparado = False
         if addr == 116 and v >= 1 << 31:
             v -= 1 << 32
+        if addr == 116 and m.empuje >= EMPUJE_MIN:
+            m.inercia = INERCIA_S              # el perfil venía bajando contra el tope: sigue empujando un rato
+        if addr == 64 and not v:
+            m.empuje = m.inercia = 0.0
         m.regs[addr] = v

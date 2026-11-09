@@ -1,0 +1,42 @@
+# Parámetros de la misión final. Las medidas ausentes mantienen los valores POR MEDIR de Config.
+mision_frutas:
+  ros__parameters:
+    esperar_pedido: true
+    automatico: true
+    reconocer: true
+    usar_tornillo: true
+    final: ""
+    pregunta_timeout: 120.0
+    caja_d1: 0.205
+    caja_d2: 0.047
+    caja_soltar: 400
+    altura_agarre_ticks: 3200
+    # Dos puntos por fruta: alturas-frutas-20261104-091955.json. No promediar las pendientes.
+    altura_ticks_bajo_limon: 8484.0
+    altura_cm_bajo_limon: 0.1
+    altura_ticks_alto_limon: 36036.0
+    altura_cm_alto_limon: 4.8
+    altura_ticks_bajo_naranja: 5490.0
+    altura_cm_bajo_naranja: 0.1
+    altura_ticks_alto_naranja: 36037.0
+    altura_cm_alto_naranja: 4.5
+    altura_ticks_bajo_mandarina: 4992.0
+    altura_cm_bajo_mandarina: 0.1
+    altura_ticks_alto_mandarina: 36036.0
+    altura_cm_alto_mandarina: 4.7
+    caja_altura_frente_cm: 3.3  # frente turquesa medido; mantener subida completa durante la entrada
+    # cam_garra con la fruta ARRIBA, medido 2026-11-04 (30 s cada una, 100 % de cuadros): limón -0.214/0.001,
+    # naranja -0.225/0.000, mandarina -0.249/0.010. Fruta que quedó en el piso vista arriba: -0.166..-0.172.
+    agarre_arriba_x: -0.230
+    agarre_arriba_y: 0.004
+    agarre_arriba_tolerancia: 0.025
+    agarre_suelta_x: -0.169
+    agarre_suelta_y: -0.001
+    # Plan B en odometría, POR MEDIR (centro del FRENTE, normal hacia afuera en radianes):
+    # caja_x:
+    # caja_y:
+    # caja_rumbo:
+    # Plan B baldosa: centro y orientación de un lado, POR MEDIR.
+    # baldosa_x:
+    # baldosa_y:
+    # baldosa_rumbo:

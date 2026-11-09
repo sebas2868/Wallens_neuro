@@ -18,6 +18,9 @@ freno_lidar:
     min_valid_readings: 10      # lecturas válidas mínimas en el sector; con menos (LiDAR tapado) se bloquea el avance
     require_scan: true          # false deja avanzar sin LiDAR (solo para pruebas)
     cmd_timeout: 0.25           # s sin /cmd_vel: no se republica nada (el driver frena solo); Nav2 y los scripts publican a >= 10 Hz
+    # Modo caja (freno/modo_caja, Float32 en m): entrar de reversa a la caja con la tenaza arriba (scripts/prueba-caja.py)
+    box_mode_timeout: 1.0       # s desde el último pedido: si quien lo pide se cae, vuelve el freno normal
+    box_mode_max_speed: 0.03    # m/s máximos de marcha atrás en modo caja
     # Vigilante del LiDAR (va dentro del freno)
     scan_lost_s: 5.0            # s sin /scan para reiniciar el nodo del LiDAR (pkill -INT)
     cooldown_s: 15.0            # s mínimos entre reinicios

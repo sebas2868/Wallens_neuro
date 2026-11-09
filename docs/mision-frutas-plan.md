@@ -1,5 +1,14 @@
 # Plan: misión de recoger una fruta y llevarla a un punto
 
+> Plan maestro del Parcial 2 (voz, cajas, reconocimiento, simulación, presentación): [plan-parcial2.md](plan-parcial2.md).
+> Este documento queda como el detalle del agarre.
+
+**Cambio del 4 nov, pinza nueva:** el homing no abre; se sube antes de accionar los dedos y se agarra a 3200 ticks.
+`cerrar:<fruta>` responde `por_verificar`. La misión requiere cámara antes y después de subir; su región ARRIBA
+todavía debe medirse. La búsqueda de cajas ahora visita candidatas turquesa y lee su tarjeta de cerca.
+Ver [medidas, pruebas y comandos actuales](resultados-20261104.md); las pruebas anteriores de este documento
+describen la pinza vieja y no validan el nuevo juez de agarre.
+
 Propuesto el 2026-11-02, revisado el mismo día con las respuestas del usuario y rehecho tras la primera prueba real. Contexto: [sistema.md](sistema.md), [navegacion.md](navegacion.md), [gripper-plan.md](gripper-plan.md),
 [brazo-bus-plan.md](brazo-bus-plan.md), [camaras.md](camaras.md), [tornillo.md](tornillo.md).
 
@@ -40,6 +49,14 @@ Decisiones:
 
 ## Máquina de estados
 
+**Integración del 2026-11-03:** la secuencia de abajo se conserva con `automatico=false`. El nodo ahora espera
+pedidos por defecto; en automático intercala `RECONOCER/EXPLORAR`, usa `mapa_objetos.py`, y después de verificar y
+subir pasa a `PREGUNTAR_FINAL`. Caja: `BUSCAR_CAJA → IR_A_CAJA → ACERCAR_CAJA → GIRAR_CAJA → ENTRAR_A_CAJA → SOLTAR`.
+Baldosa: `BUSCAR_BALDOSA → IR_A_BALDOSA → GIRAR_BALDOSA → ACERCAR_BALDOSA → BAJAR_CONTACTO → SOLTAR_SUAVE → SUBIR_UN_POCO`.
+Ambos terminan con `ALEJAR → CERRAR_VACIO → BAJAR_VACIO → FIN`; el nodo vuelve a `ESPERAR_PEDIDO`.
+`mision/final` solo se acepta durante la pregunta. Plan vigente y pruebas físicas:
+[plan-parcial2.md](plan-parcial2.md), [pruebas-manana.md](pruebas-manana.md).
+
 `ros/wallens_mision/scripts/mision_logica.py` (sin ROS). Rehecha el 2026-11-02 tras la primera prueba real, más corta:
 un estado hace una sola cosa y tiene un tiempo máximo. La fruta elegida vive en `odom` (`objetivo`): `cam_frutas` la
 sitúa desde lejos, `cam_garra` la corrige de cerca y entre cuadros la lleva la odometría, así que un cuadro perdido no
@@ -59,15 +76,15 @@ se pidió: abrirla tarda 3.4 s `cam_frutas` y 1.4 s `cam_garra`, medido en la Pi
 
 | Estado | Cámara | Qué hace | Sale cuando | Máx. |
 |---|---|---|---|---|
-| `INICIO` | la del primer estado | Espera odometría, brazo, batería y el detector, **diciendo qué falta**; batería ≥ 14.6 V; brazo congelado sin fruta → orden `rearmar` (queda en el log); congelado con fruta → fallo; luego **cierra la pinza** (`cerrar` en vacío; si agarra algo, fallo) salvo si empieza con fruta o en ABRIR…VERIFICAR | todo bien | 60 s |
+| `INICIO` | la del primer estado | Espera odometría, brazo, batería y detector; batería ≥ 14.6 V. Rearma si está congelado sin fruta; con fruta falla. Con `usar_tornillo=true` calibra si falta cero, antes de mover ruedas; luego cierra en vacío salvo en ABRIR…VERIFICAR. Para empezar llevando fruta exige cero vigente y ordena subir | resultado más estado actualizado, libre y calibrado | 60 s + hasta 90 s de calibración o 60 s de subida |
 | `IR_A_ZONA` | frutas | Traslado (`_ir_a`) a 0.8 m de la zona rodeando las entregadas; gira hacia ella | llega | 60 s |
 | `BUSCAR` | frutas | Mira (0.6 s de latencia, mínimo 1 s); barre 0°, ±20°, ±40°. Registra todas las frutas de la zona y elige una dirección de aproximación que no toque a las vecinas | 3 detecciones coherentes de la pedida | 40 s |
 | `ACERCAR` | frutas | Si hace falta rodea la fruta a 0.7 m en arcos de ≤ 45°; luego de frente, corrigiendo con la cámara | a 0.36 ± 0.02 m (lo justo para girar con los dedos abiertos) | 90 s |
 | `GIRAR` | garra | 180° en el sitio: el gripper queda mirando a la fruta | ± 2° | 20 s |
-| `ABRIR` | garra | orden `abrir` | el brazo responde | 20 s |
+| `ABRIR` | garra | `bajar` y, cuando responde `listo`, `abrir`; con tornillo desactivado solo abre | resultado y brazo libre | 20 s + hasta 60 s de bajada |
 | `RETROCEDER` | garra | Marcha atrás ≤ 0.03 m/s hacia la estimación, corrigiendo el rumbo. Cada cuadro de `cam_garra` a < 10 cm de la estimación (5 cm ya confirmada) la corrige a medias; los demás se ignoran. Si la estimación está dentro del campo de `cam_garra` y no la ve en 0.6 s: **para** y espera 1.5 s; si sigue sin verla y ya estaba confirmada, sigue con la odometría ≤ 6 cm (pasa bajo la cámara); si no, `REINTENTO` | estimación en la zona de agarre (± 1.5 cm, ± 1.2 cm) con ≥ 2 confirmaciones | 40 s, ≤ 0.30 m |
 | `CERRAR` | garra | 0.5 s quieto (el brazo exige ruedas quietas) y `cerrar:<tipo>` | `agarrado`; `sin_agarre` → `REINTENTO` | 20 s |
-| `VERIFICAR` | garra | 1.5 s mirando la fruta agarrada: **registra dónde la ve** (`agarre_visto`, sale en el log) | el brazo la sostiene | 10 s |
+| `VERIFICAR` | garra | 1.5 s mirando la fruta agarrada: **registra dónde la ve abajo** (`agarre_visto`); después `subir` con fruta, sin actualizar esa medida durante la subida | `listo`, brazo libre y sosteniendo; también antes de terminar con `hasta:=VERIFICAR` | 10 s + hasta 60 s de subida |
 | `REINTENTO` | frutas | `abrir`, avanza 0.30 m, gira hacia la fruta y vuelve a `BUSCAR` alrededor de la última estimación (radio 15 cm) | | 40 s |
 | `SALIR` | — | Avanza 0.3 m en recta (girar ahí barrería a las vecinas) | llega | 15 s |
 | `IR_A_ENTREGA` | — | Traslado al punto previo, a 0.5 m de la línea por el lado de la zona, rodeando frutas | llega | 90 s |
@@ -75,8 +92,9 @@ se pidió: abrirla tarda 3.4 s `cam_frutas` y 1.4 s `cam_garra`, medido en la Pi
 | `SOLTAR` / `ALEJAR` / `CERRAR_VACIO` | — | `soltar`; avanza 0.3 m con la pinza abierta; `cerrar` (si dice `agarrado`, fallo) | | 20/15/20 s |
 | `VOLVER_HOME` | — | Si se pidió: traslado a (0, 0) | llega | 90 s |
 
-Cambios frente a la primera versión: sin estados del ascensor (el tornillo está roto; cuando vuelva, `bajar`/`subir`
-entran como órdenes dentro de `ABRIR` y `VERIFICAR`), `RODEAR` va dentro de `ACERCAR` y `ORIENTAR` dentro de `DEJAR`,
+Actualizado en B4 (2026-11-03): el tornillo está reparado; `bajar`/`subir` entran como órdenes dentro de `ABRIR` y
+`VERIFICAR`, y `calibrar` dentro de `INICIO` si falta cero. `usar_tornillo=false` conserva el modo anterior.
+`RODEAR` va dentro de `ACERCAR` y `ORIENTAR` dentro de `DEJAR`,
 `ALINEAR` pasa a ser `RETROCEDER` y el reintento ya no es "avanzar 5 cm y repetir" sino volver a buscar con `cam_frutas`.
 
 ### Segunda prueba (2026-11-02, etapa `agarre`)
@@ -174,7 +192,7 @@ viejo corriendo (los tres problemas de lanzarlo a mano). La regla `systemd/sudoe
 dos servicios sin contraseña.
 
 ```
-scripts/probar.sh agarre          # limón 33 cm detrás, en el eje: cam_garra + gripper (~20 s)
+scripts/probar.sh agarre          # limón 33 cm detrás: homing si falta cero, baja, agarra y sube
 scripts/probar.sh agarre          # otra vez: ya usa el x_agarre/y_agarre medido
 scripts/probar.sh acercar         # limón a menos de 1 m al frente: cam_frutas, acercarse y girar 180°
 scripts/probar.sh hasta-agarrar   # lo anterior y agarrarlo

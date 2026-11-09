@@ -218,6 +218,42 @@ def ciclo_con(f, v, w, puntos, t=10.0):
     return f.ciclo(t)
 
 
+def test_modo_caja_deja_retroceder_hasta_2cm_de_la_pared_del_fondo():
+    # pared 10 cm detrás de la punta del gripper: normal frena (15 cm); en modo caja (2 cm) pasa, a lo sumo a 3 cm/s
+    pared = [(-0.281 - 0.10, y / 100) for y in range(-5, 6)]
+    assert ciclo_con(con_huella(), -0.05, 0.0, pared)[2]
+    f = con_huella()
+    assert f.on_modo_caja(0.02, 10.0)
+    v, w, bloqueado, _ = ciclo_con(f, -0.05, 0.0, pared)
+    assert not bloqueado and v == -0.03
+    f = con_huella()
+    f.on_modo_caja(0.02, 10.0)
+    v, _, bloqueado, motivo = ciclo_con(f, -0.02, 0.0, [(-0.281 - 0.01, y / 100) for y in range(-5, 6)])
+    assert bloqueado and v == 0.0 and "modo caja" in motivo
+
+
+def test_modo_caja_no_cambia_el_avance_ni_el_giro():
+    f = con_huella()
+    f.on_modo_caja(0.02, 10.0)
+    assert ciclo_con(f, 0.05, 0.0, [(0.148 + 0.05, 0.0)])[2]                 # adelante sigue frenando a 15 cm
+    f = con_huella()
+    f.on_modo_caja(0.02, 10.0)
+    assert ciclo_con(f, 0.0, 0.3, [(-0.30, 0.06), (-0.30, -0.06)])[2]        # el gripper barrería: frena el giro
+
+
+def test_modo_caja_vence_solo_y_se_apaga_con_negativo():
+    pared = [(-0.281 - 0.10, y / 100) for y in range(-5, 6)]
+    f = con_huella(caja_timeout=1.0)
+    f.on_modo_caja(0.02, 10.0)
+    assert not ciclo_con(f, -0.05, 0.0, pared, t=10.9)[2]
+    assert ciclo_con(f, -0.05, 0.0, pared, t=11.1)[2]                        # nadie lo renovó: vuelve a 15 cm
+    f = con_huella()
+    f.on_modo_caja(0.02, 10.0)
+    assert not f.on_modo_caja(-1.0, 10.1)
+    assert ciclo_con(f, -0.05, 0.0, pared, t=10.2)[2]
+    assert not f.on_modo_caja(math.nan, 10.3) and not f.on_modo_caja(math.inf, 10.3)
+
+
 def test_huella_contiene_chasis_y_gripper():
     from freno_logica import dentro
     assert dentro(HUELLA, 0.14, 0.0) and dentro(HUELLA, 0.0, 0.14) and dentro(HUELLA, -0.27, 0.0)
