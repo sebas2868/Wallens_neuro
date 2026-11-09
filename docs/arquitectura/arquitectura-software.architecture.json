@@ -1,0 +1,389 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Wallens: arquitectura de software en ROS 2",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "pedido",
+        "label": "Del pedido por voz a la decisión",
+        "focus": [
+          "mic",
+          "voz",
+          "mision",
+          "camaras",
+          "detector"
+        ],
+        "note": "La voz elige la fruta; el detector le dice a la misión dónde están las frutas, las cajas y lo que hay entre los dedos."
+      },
+      {
+        "id": "movimiento",
+        "label": "Ruedas con freno de seguridad",
+        "focus": [
+          "mision",
+          "freno",
+          "lidar",
+          "driver",
+          "motores"
+        ],
+        "note": "Toda orden de velocidad pasa por el freno del LiDAR antes de llegar al driver de las ruedas."
+      },
+      {
+        "id": "brazo",
+        "label": "Brazo: ascensor y gripper",
+        "focus": [
+          "mision",
+          "brazo",
+          "driver",
+          "motores"
+        ],
+        "note": "El nodo del brazo comparte el bus Dynamixel del driver mediante transacciones."
+      },
+      {
+        "id": "estimacion",
+        "label": "Estimación de la posición",
+        "focus": [
+          "driver",
+          "imu",
+          "ekf",
+          "mision"
+        ],
+        "note": "El EKF fusiona la odometría de las ruedas con el giroscopio del IMU."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "mic",
+      "type": "external",
+      "label": "Micrófono",
+      "sublabel": "C270",
+      "pos": [
+        30,
+        90
+      ],
+      "size": [
+        140,
+        64
+      ]
+    },
+    {
+      "id": "voz",
+      "type": "frontend",
+      "label": "voz_pedido",
+      "sublabel": "Vosk, sin internet",
+      "pos": [
+        210,
+        90
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "camaras",
+      "type": "external",
+      "label": "Cámaras",
+      "sublabel": "frontal + garra",
+      "pos": [
+        30,
+        250
+      ],
+      "size": [
+        140,
+        64
+      ]
+    },
+    {
+      "id": "detector",
+      "type": "backend",
+      "label": "detector_frutas",
+      "sublabel": "C++ · color y forma",
+      "pos": [
+        210,
+        250
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "mision",
+      "type": "backend",
+      "label": "mision_frutas",
+      "sublabel": "máquina de estados",
+      "pos": [
+        430,
+        242
+      ],
+      "size": [
+        180,
+        80
+      ],
+      "tag": "decide"
+    },
+    {
+      "id": "brazo",
+      "type": "backend",
+      "label": "wallens_brazo",
+      "sublabel": "ascensor + gripper",
+      "pos": [
+        670,
+        90
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "freno",
+      "type": "security",
+      "label": "freno_lidar",
+      "sublabel": "huella del robot",
+      "pos": [
+        670,
+        250
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "lidar",
+      "type": "external",
+      "label": "LiDAR LD19",
+      "sublabel": "/scan",
+      "pos": [
+        670,
+        420
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "driver",
+      "type": "backend",
+      "label": "wallens_driver",
+      "sublabel": "C++ · tiempo real",
+      "pos": [
+        920,
+        250
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "motores",
+      "type": "external",
+      "label": "Dynamixel XM430",
+      "sublabel": "ruedas · tornillo · pinza",
+      "pos": [
+        1140,
+        250
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "ekf",
+      "type": "database",
+      "label": "EKF",
+      "sublabel": "robot_localization",
+      "pos": [
+        920,
+        420
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "imu",
+      "type": "external",
+      "label": "IMU BNO055",
+      "sublabel": "wallens_imu",
+      "pos": [
+        1140,
+        420
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Raspberry Pi 4 · ROS 2",
+      "wraps": [
+        "voz",
+        "detector",
+        "mision",
+        "brazo",
+        "freno",
+        "driver",
+        "ekf"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "audio",
+      "from": "mic",
+      "to": "voz",
+      "label": "audio"
+    },
+    {
+      "id": "pedido",
+      "from": "voz",
+      "to": "mision",
+      "label": "mision/pedido",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          520,
+          122
+        ]
+      ]
+    },
+    {
+      "id": "imagen",
+      "from": "camaras",
+      "to": "detector",
+      "label": "imagen"
+    },
+    {
+      "id": "detecciones",
+      "from": "detector",
+      "to": "mision",
+      "label": "detecciones"
+    },
+    {
+      "id": "cmdvel",
+      "from": "mision",
+      "to": "freno",
+      "label": "cmd_vel",
+      "variant": "emphasis",
+      "labelDy": 16
+    },
+    {
+      "id": "cmdsafe",
+      "from": "freno",
+      "to": "driver",
+      "label": "cmd_vel_safe",
+      "variant": "emphasis"
+    },
+    {
+      "id": "bus",
+      "from": "driver",
+      "to": "motores",
+      "label": "bus"
+    },
+    {
+      "id": "orden",
+      "from": "mision",
+      "to": "brazo",
+      "label": "brazo/orden"
+    },
+    {
+      "id": "transaccion",
+      "from": "brazo",
+      "to": "driver",
+      "label": "transacción",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          1000,
+          122
+        ]
+      ]
+    },
+    {
+      "id": "scan",
+      "from": "lidar",
+      "to": "freno",
+      "label": "/scan",
+      "variant": "security"
+    },
+    {
+      "id": "odom",
+      "from": "driver",
+      "to": "ekf",
+      "label": "/odom",
+      "labelAt": [
+        1035,
+        367
+      ]
+    },
+    {
+      "id": "giro",
+      "from": "imu",
+      "to": "ekf",
+      "label": "giro"
+    },
+    {
+      "id": "pose",
+      "from": "ekf",
+      "to": "mision",
+      "label": "pose",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          1000,
+          550
+        ],
+        [
+          520,
+          550
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Percepción",
+      "items": [
+        "Voz: limón, naranja o mandarina",
+        "Una cámara a la vez: frutas al frente o garra",
+        "Cajas reconocidas por la foto de la fruta"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Decisión",
+      "items": [
+        "Reconocer, buscar, acercar, agarrar, verificar",
+        "Buscar la caja, entrar, soltar y salir"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Seguridad",
+      "items": [
+        "Freno con la huella real del robot",
+        "Parada por software y vigilancia del bus de 200 ms",
+        "Corte por batería baja"
+      ]
+    }
+  ]
+}

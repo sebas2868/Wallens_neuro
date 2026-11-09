@@ -4,6 +4,34 @@ Robot diferencial con una Raspberry Pi 4 (8 GB) que busca un limón en el suelo 
 de atrás y lo deja en el punto que se le pida. Corre ROS 2 Jazzy en la Pi; desde el PC se mira y se manda todo por
 ROS 2 dentro de Docker.
 
+<p align="center">
+  <img src="docs/media/robot_perfil_gripper.jpg" width="32%" alt="Wallens de perfil con el gripper">
+  <img src="docs/media/robot_lateral.jpg" width="32%" alt="Wallens de lado">
+  <img src="docs/media/robot_arriba.jpg" width="32%" alt="Wallens visto desde arriba">
+</p>
+
+## El robot en acción
+
+| Misión completa (10× más rápido) | Agarre de la fruta (8× más rápido) |
+|---|---|
+| <img src="docs/media/mision_navegacion_x10.gif" width="440" alt="Wallens navegando hacia la fruta y las cajas"> | <img src="docs/media/agarre_fruta_x8.gif" width="260" alt="Wallens recogiendo la fruta con el gripper"> |
+
+Videos a velocidad real: [misión](docs/media/mision_navegacion.mp4) · [agarre](docs/media/agarre_fruta.mp4).
+
+<p align="center"><img src="docs/media/escenario_frutas_cajas.jpg" width="70%" alt="Escenario con limón, naranja, mandarina y las tres cajas con foto"></p>
+
+## Arquitectura de software
+
+![Arquitectura de software de Wallens](docs/arquitectura/arquitectura-software.png)
+
+Versión interactiva, con recorridos guiados por el pedido, el movimiento, el brazo y la estimación de la posición:
+descarga [docs/arquitectura/arquitectura-software.html](docs/arquitectura/arquitectura-software.html) y ábrela en el
+navegador.
+
+> **Código evaluado el 4/11/2026:** etiqueta [`evaluacion-4nov`](https://github.com/sebas2868/Wallens_neuro/tree/evaluacion-4nov).
+> Después de esa etiqueta solo se agregó documentación (fotos, videos, diagrama y
+> [evidencia](docs/evidencia-evaluacion-4nov/README.md)); el código no cambió.
+
 Este README sirve para empezar: entender el robot, montar el PC, conectarse y correr la misión. El detalle está en
 [docs/](docs/).
 
